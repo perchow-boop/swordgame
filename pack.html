@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>懷舊膠劍仔｜撕盲袋</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            shop: ['"Ma Shan Zheng"', '"KaiTi"', "serif"],
+            body: ['"Noto Sans TC"', '"Microsoft JhengHei"', "sans-serif"],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .pack {
+      filter: drop-shadow(0 18px 16px rgba(40, 18, 6, 0.38));
+    }
+
+    .bag-frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 518 / 752;
+      overflow: hidden;
+    }
+
+    .bag-frame img {
+      position: absolute;
+      width: 173%;
+      height: 159.6%;
+      left: -37.84%;
+      top: -40.43%;
+      max-width: none;
+    }
+
+    .nudge {
+      animation: nudge 1.05s ease-in-out infinite;
+    }
+
+    .pack:not(.idle) .nudge {
+      opacity: 0;
+    }
+
+    .pack.idle {
+      cursor: pointer;
+    }
+
+    .pack.idle:hover {
+      animation: swing 2.5s ease-in-out infinite;
+    }
+
+    .pack.holding {
+      animation: glow 1.15s ease-in-out infinite;
+    }
+
+    .prize.show .sword {
+      animation: pop 0.55s cubic-bezier(0.2, 1.45, 0.32, 1) both;
+    }
+
+    .prize.show .stat-card {
+      animation: card-in 0.45s ease 0.08s both;
+    }
+
+    .prize {
+      position: relative;
+      width: 100%;
+      margin-left: 0;
+    }
+
+    .prize-weapon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+
+    .prize .sword {
+      width: auto;
+      height: min(28.8vh, 202px);
+      max-width: 100%;
+      margin-top: 2px;
+      object-fit: contain;
+    }
+
+    .prize #again {
+      margin-top: 14px;
+    }
+
+    body.prize-open {
+      cursor: pointer;
+    }
+
+    .stat-card {
+      position: absolute;
+      top: 8px;
+      right: calc(100% + 18px);
+      width: min(248px, calc((max(100vw, 100dvh) - min(28%, 280px)) / 2 - 28px));
+      margin-top: 0;
+      padding: 10px 12px 12px;
+      border: 1px solid rgba(255, 236, 196, 0.72);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(255, 248, 236, 0.72), rgba(255, 236, 208, 0.46));
+      box-shadow:
+        0 10px 24px rgba(42, 16, 6, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(10px);
+      color: #6a2a16;
+      text-align: center;
+    }
+
+    .stat-card h2 {
+      margin: 0;
+      font-size: 34px;
+      line-height: 1;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-rows {
+      margin: 8px 0 0;
+    }
+
+    .stat-rows div {
+      display: grid;
+      grid-template-columns: 4.2em 1fr;
+      align-items: center;
+      gap: 6px;
+      margin-top: 3px;
+    }
+
+    .stat-rows dt {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-align: left;
+    }
+
+    .stat-rows dd {
+      display: flex;
+      justify-content: flex-end;
+      gap: 2px;
+      margin: 0;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .stat-rows .on { filter: drop-shadow(0 1px 0 rgba(120, 60, 10, 0.25)); }
+    .stat-rows .off { opacity: 0.28; filter: grayscale(0.4); }
+
+    .stat-card .trait {
+      margin: 8px 0 0;
+      padding-top: 8px;
+      border-top: 1px solid rgba(122, 58, 24, 0.22);
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.45;
+    }
+
+    @keyframes swing {
+      0%, 100% { transform: rotate(-2.4deg); }
+      50% { transform: rotate(2.6deg); }
+    }
+
+    @keyframes glow {
+      0%, 100% { filter: drop-shadow(0 18px 16px rgba(40, 18, 6, 0.38)) drop-shadow(0 0 14px rgba(255, 196, 84, 0.55)) drop-shadow(0 0 32px rgba(255, 150, 40, 0.35)); }
+      50% { filter: drop-shadow(0 18px 16px rgba(40, 18, 6, 0.38)) drop-shadow(0 0 24px rgba(255, 220, 130, 0.95)) drop-shadow(0 0 52px rgba(255, 150, 40, 0.72)); }
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.45) rotate(-8deg); opacity: 0; }
+      70% { transform: scale(1.08) rotate(2deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @keyframes nudge {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(12px); }
+    }
+
+    .pack-stage {
+      width: min(96%, 1080px);
+      margin-top: 0;
+    }
+
+    .pack-col {
+      width: min(28%, 280px);
+    }
+
+    @media (orientation: landscape) and (max-height: 460px) {
+      .pack-col { width: min(22%, 200px); }
+      .pack-col header { padding-top: 4px; padding-bottom: 4px; }
+    }
+
+    @media (orientation: portrait) and (max-width: 900px) {
+      body.font-body::before {
+        content: "請將手機轉橫";
+        position: fixed;
+        inset: 0;
+        z-index: 80;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+        color: #ffe7a8;
+        background: #1a100c;
+        font-family: "Ma Shan Zheng", "KaiTi", serif;
+        font-size: 42px;
+        letter-spacing: 0.08em;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pack.idle:hover,
+      .pack.holding,
+      .prize.show .sword,
+      .prize.show .stat-card,
+      .nudge {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body class="font-body h-screen overflow-hidden text-amber-50">
+  <div class="relative h-full w-full">
+    <img
+      src="packages/package_bg.jpg"
+      alt=""
+      class="pointer-events-none absolute inset-0 h-full w-full object-cover"
+    />
+    <div class="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/45"></div>
+
+    <main class="relative z-10 flex h-full items-center justify-center px-4 py-3">
+      <div id="stage" class="pack-stage relative flex items-center justify-center gap-6">
+        <div class="pack-col relative flex shrink-0 flex-col">
+        <header class="z-20 mb-1 flex shrink-0 flex-col items-center gap-1 rounded-2xl border border-amber-200/40 bg-red-900/80 px-3 py-2 text-center shadow-lg backdrop-blur-sm">
+          <h1 class="font-shop whitespace-nowrap text-2xl leading-none text-amber-50">懷舊膠劍仔</h1>
+          <p id="hint" class="whitespace-nowrap text-xs leading-none text-amber-100">按住盲袋，向下撕開</p>
+          <p id="draws" hidden class="whitespace-nowrap text-sm font-black leading-none tracking-widest text-amber-50"></p>
+        </header>
+        <div
+          id="pack"
+          class="pack idle relative w-full origin-[center_18%] select-none"
+        >
+          <div class="bag-frame">
+          <img
+            id="sealed"
+            src="packages/package_01.png"
+            alt="未開封盲袋"
+            draggable="false"
+          />
+          <img
+            id="torn"
+            src="packages/package_02.png"
+            alt=""
+            draggable="false"
+            class="pointer-events-none opacity-0"
+          />
+          </div>
+          <div class="nudge pointer-events-none absolute left-[calc(100%+8px)] top-[22%] z-10 flex h-14 w-14 items-center justify-center rounded-full bg-red-800/95 text-amber-100 shadow-lg ring-2 ring-amber-200" aria-hidden="true">
+            <svg viewBox="0 0 24 24" class="h-8 w-8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 4v14" />
+              <path d="M6 13l6 7 6-7" />
+            </svg>
+          </div>
+        </div>
+
+        <section
+          id="prize"
+          class="prize pointer-events-none hidden flex-col items-center"
+          aria-live="polite"
+        >
+          <div class="stat-card">
+            <h2 id="prize-name" class="font-shop"></h2>
+            <dl class="stat-rows">
+              <div>
+                <dt>價值</dt>
+                <dd id="stat-value"></dd>
+              </div>
+              <div>
+                <dt>重量</dt>
+                <dd id="stat-weight"></dd>
+              </div>
+              <div>
+                <dt>摩擦力</dt>
+                <dd id="stat-grip"></dd>
+              </div>
+            </dl>
+            <p id="prize-trait" class="trait"></p>
+          </div>
+          <div class="prize-weapon">
+            <img id="sword" alt="" class="sword object-contain drop-shadow-[0_18px_18px_rgba(0,0,0,0.45)]" />
+            <button
+              id="again"
+              type="button"
+              class="pointer-events-auto rounded-full bg-red-700 px-5 py-2 text-sm font-bold text-amber-50 shadow-md hover:bg-red-600"
+            >
+              再撕一包
+            </button>
+          </div>
+        </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="weapon-store.js?v=jiimg"></script>
+  <script>
+    const PRIZES = WeaponStore.load()
+      .filter((item) => item.imageData || item.image)
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        value: Number(item.value) || 1,
+        weight: Number(item.weight) || 1,
+        grip: Number(item.grip) || 1,
+        trait: item.trait || "",
+        src: item.imageData || item.image,
+      }));
+    const TEAR_START = 42;
+    const TEAR_SPAN = 76;
+    const OPEN_DISTANCE = 176;
+    const RELEASE_DISTANCE = 96;
+
+    const pack = document.getElementById("pack");
+    const torn = document.getElementById("torn");
+    const prize = document.getElementById("prize");
+    const sword = document.getElementById("sword");
+    const prizeName = document.getElementById("prize-name");
+    const statValue = document.getElementById("stat-value");
+    const statWeight = document.getElementById("stat-weight");
+    const statGrip = document.getElementById("stat-grip");
+    const prizeTrait = document.getElementById("prize-trait");
+    const hint = document.getElementById("hint");
+    const draws = document.getElementById("draws");
+    const again = document.getElementById("again");
+    const packMode = new URLSearchParams(window.location.search).get("mode");
+    const draft = packMode === "cpu" || packMode === "duo" || packMode === "online";
+
+    let phase = "idle";
+    let drawsLeft = 3;
+    let pulled = [];
+    let leaveTimer = 0;
+    let pointerId = null;
+    let startY = 0;
+    let pull = 0;
+
+    function setHint(text) {
+      hint.textContent = text;
+    }
+
+    function paintDraws() {
+      if (!draft) return;
+      draws.hidden = false;
+      draws.textContent = (packMode === "online" ? "你的三包 · " : "") + "剩餘 " + drawsLeft + " 次";
+    }
+
+    function finishDraft() {
+      window.clearTimeout(leaveTimer);
+      try {
+        sessionStorage.setItem("sword-draft-v1", JSON.stringify(pulled));
+      } catch (error) {}
+      const params = new URLSearchParams(window.location.search);
+      let mode = params.get("mode") || "cpu";
+      try {
+        const ticket = JSON.parse(sessionStorage.getItem("sword-play-v1") || "null");
+        if (ticket && ticket.mode) mode = ticket.mode;
+        if (ticket && ticket.terrain) params.set("terrain", ticket.terrain);
+        if (mode === "cpu" && ticket && ticket.ai) params.set("ai", ticket.ai);
+        if (ticket && ticket.room) params.set("room", ticket.room);
+        if (ticket && ticket.seat) params.set("seat", ticket.seat);
+        if (ticket && ticket.weapon) params.set("weapon", ticket.weapon);
+      } catch (error) {}
+      params.set("mode", mode);
+      const ids = pulled.filter(Boolean);
+      if (ids.length) params.set("roll", ids.join(","));
+      window.location.href = "play.html?" + params.toString();
+    }
+
+    function paintPull(distance) {
+      pull = Math.max(0, distance);
+      const stretch = 1 + Math.min(pull, 220) / 680;
+      pack.style.transition = "none";
+      torn.style.transition = "none";
+      pack.style.transform = "translateY(" + pull * 0.72 + "px) scaleY(" + stretch + ") rotate(" + Math.min(pull, 160) * 0.01 + "deg)";
+      torn.style.opacity = String(Math.max(0, Math.min(1, (pull - TEAR_START) / TEAR_SPAN)));
+      if (pull >= TEAR_START) setHint("再拉低少少就開到");
+    }
+
+    function springBack() {
+      phase = "idle";
+      pointerId = null;
+      pull = 0;
+      pack.classList.remove("holding");
+      pack.classList.add("idle");
+      pack.style.transition = "transform 0.45s cubic-bezier(.2,1.25,.32,1)";
+      torn.style.transition = "opacity 0.35s ease";
+      pack.style.transform = "";
+      torn.style.opacity = "0";
+      setHint("按住盲袋，向下撕開");
+    }
+
+    function meter(count, icon) {
+      let marks = "";
+      for (let i = 1; i <= 5; i += 1) {
+        marks += '<span class="' + (i <= count ? "on" : "off") + '">' + icon + "</span>";
+      }
+      return marks;
+    }
+
+    function reveal() {
+      if (phase === "revealed") return;
+      phase = "revealed";
+      pointerId = null;
+      const item = PRIZES[Math.floor(Math.random() * PRIZES.length)];
+      sword.src = item.src;
+      sword.alt = item.name;
+      prizeName.textContent = item.name;
+      statValue.innerHTML = meter(item.value, "🪙");
+      statValue.setAttribute("aria-label", "價值 " + item.value + "／5");
+      statWeight.innerHTML = meter(item.weight, "⭐");
+      statWeight.setAttribute("aria-label", "重量 " + item.weight + "／5");
+      statGrip.innerHTML = meter(item.grip, "🛞");
+      statGrip.setAttribute("aria-label", "摩擦力 " + item.grip + "／5");
+      prizeTrait.textContent = item.trait;
+      if (draft && item.id) pulled.push(item.id);
+      pack.classList.remove("holding", "idle");
+      pack.style.transition = "opacity 0.22s ease, transform 0.22s ease";
+      pack.style.opacity = "0";
+      pack.style.transform = "translateY(" + Math.max(pull, 40) * 0.72 + "px) scale(0.94)";
+      pack.style.position = "absolute";
+      pack.style.left = "0";
+      pack.style.right = "0";
+      pack.style.width = "100%";
+      pack.style.pointerEvents = "none";
+      prize.classList.remove("hidden");
+      prize.classList.add("show", "flex");
+      document.body.classList.add("prize-open");
+      setHint("撕開喇，呢把劍係你嘅");
+      if (!draft) {
+        setHint("撳畫面再撕一包");
+        return;
+      }
+      if (drawsLeft <= 1) {
+        again.textContent = "開始對戰";
+        if (packMode === "online") setHint("你抽完三包。撳畫面就開始對戰");
+        else setHint("撳畫面就開始對戰");
+        leaveTimer = window.setTimeout(finishDraft, 1600);
+        return;
+      }
+      again.textContent = "再撕一包";
+      setHint("撳畫面再撕一包");
+    }
+
+    function resetPack() {
+      phase = "idle";
+      pointerId = null;
+      pull = 0;
+      pack.style.transition = "none";
+      torn.style.transition = "none";
+      pack.style.transform = "";
+      pack.style.opacity = "";
+      pack.style.position = "";
+      pack.style.left = "";
+      pack.style.right = "";
+      pack.style.width = "";
+      pack.style.pointerEvents = "";
+      torn.style.opacity = "0";
+      pack.classList.remove("holding");
+      pack.classList.add("idle");
+      prize.classList.add("hidden");
+      prize.classList.remove("show", "flex");
+      document.body.classList.remove("prize-open");
+      sword.removeAttribute("src");
+      again.textContent = "再撕一包";
+      if (draft && drawsLeft > 1) {
+        drawsLeft -= 1;
+        paintDraws();
+      }
+      setHint("按住盲袋，向下撕開");
+    }
+
+    pack.addEventListener("pointerdown", (event) => {
+      if (phase !== "idle" || event.button !== 0) return;
+      phase = "holding";
+      pointerId = event.pointerId;
+      startY = event.clientY;
+      pack.classList.remove("idle");
+      pack.classList.add("holding");
+      pack.setPointerCapture(event.pointerId);
+      setHint("按住，向下撕");
+    });
+
+    pack.addEventListener("pointermove", (event) => {
+      if (phase !== "holding" || event.pointerId !== pointerId) return;
+      paintPull(event.clientY - startY);
+      if (pull >= OPEN_DISTANCE) reveal();
+    });
+
+    function finishPointer(event) {
+      if (event.pointerId !== pointerId) return;
+      if (phase === "holding") {
+        if (pull >= RELEASE_DISTANCE) reveal();
+        else springBack();
+      }
+    }
+
+    pack.addEventListener("pointerup", finishPointer);
+    pack.addEventListener("pointercancel", finishPointer);
+    function continueAfterReveal() {
+      if (phase !== "revealed") return;
+      if (draft && drawsLeft <= 1) {
+        finishDraft();
+        return;
+      }
+      resetPack();
+    }
+
+    let screenPress = false;
+    document.addEventListener("pointerdown", (event) => {
+      if (phase !== "revealed" || event.button !== 0) return;
+      if (event.target.closest && event.target.closest("#again")) return;
+      screenPress = true;
+    });
+    document.addEventListener("pointerup", (event) => {
+      if (!screenPress || event.button !== 0) return;
+      screenPress = false;
+      continueAfterReveal();
+    });
+    document.addEventListener("pointercancel", () => {
+      screenPress = false;
+    });
+    again.addEventListener("click", (event) => {
+      event.stopPropagation();
+      continueAfterReveal();
+    });
+    paintDraws();
+  </script>
+</body>
+</html>
