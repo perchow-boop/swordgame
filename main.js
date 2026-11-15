@@ -1945,8 +1945,17 @@
     return Promise.race([attempt, timeout]);
   }
 
-  function onlinePeerId(seat) {
-    return "jj" + roomCode.toLowerCase() + seat;
+  const onlinePeerSlots = ["", "a", "b", "c", "d", "e"];
+  let onlineHostSlot = 0;
+  let onlineGuestSlot = 0;
+
+  function onlinePeerId(seat, slot) {
+    const suffix = seat === "p1" ? onlinePeerSlots[slot == null ? onlineHostSlot : slot] || "" : "";
+    return "jj" + roomCode.toLowerCase() + seat + suffix;
+  }
+
+  function guestHostId() {
+    return "jj" + roomCode.toLowerCase() + "p1" + (onlinePeerSlots[onlineGuestSlot] || "");
   }
 
   const onlineStunServers = [
@@ -2030,7 +2039,7 @@
   }
 
   function reviveOnlinePeer(peer, delay) {
-    if (onlinePeer !== peer || onlinePeerAttempt >= 15 || onlinePeerTimer) return;
+    if (onlinePeer !== peer || onlinePeerAttempt >= 24 || onlinePeerTimer) return;
     onlinePeerAttempt += 1;
     onlinePeerTimer = window.setTimeout(() => {
       onlinePeerTimer = 0;
@@ -2072,9 +2081,9 @@
     const epoch = ++onlineGuestEpoch;
     onlineGuestAttempt += 1;
     if (onlineGuestAttempt > 1 && onlineGuestFault) {
-      setStatus("PeerJS：" + onlineGuestFault + "。再試第 " + onlineGuestAttempt + " 次。");
+      setStatus("PeerJS：" + onlineGuestFault + "。再試 " + guestHostId() + " 第 " + onlineGuestAttempt + " 次。");
     }
-    const conn = peer.connect(onlinePeerId("p1"), { reliable: true });
+    const conn = peer.connect(guestHostId(), { reliable: true });
     onlineGuestConn = conn;
     let iceState = "";
     const current = () => epoch === onlineGuestEpoch && !onlineToken;
@@ -2082,6 +2091,7 @@
       if (!current()) return;
       onlineGuestEpoch += 1;
       onlineGuestGiveUp = null;
+      if (err && err.type === "peer-unavailable") onlineGuestSlot = (onlineGuestSlot + 1) % onlinePeerSlots.length;
       if (err) {
         onlineGuestFault = peerErrorText(err);
         setStatus("PeerJS：" + onlineGuestFault);
@@ -2105,8 +2115,8 @@
     window.setTimeout(() => {
       if (!current() || conn.open) return;
       if (iceState === "checking" || iceState === "connected" || iceState === "completed") return;
-      giveUp({ type: "webrtc", message: "timeout" }, 900);
-    }, 20000);
+      giveUp({ type: "peer-unavailable", message: "no-answer " + guestHostId() }, 400);
+    }, 6000);
     window.setTimeout(() => {
       if (current() && !conn.open) giveUp({ type: "webrtc", message: "timeout" }, 900);
     }, 45000);
@@ -2141,6 +2151,13 @@
         else scheduleGuestConnect(guestRetryDelay(err));
         return;
       }
+      if (kind === "unavailable-id" && onlineSeat === "p1") {
+        onlineHostSlot = (onlineHostSlot + 1) % onlinePeerSlots.length;
+        peer._swordFault = "unavailable-id";
+        setStatus("PeerJS：unavailable-id。改掛 " + onlinePeerId("p1"));
+        reviveOnlinePeer(peer, onlineHostSlot === 0 ? 8000 : 400);
+        return;
+      }
       peer._swordFault = text;
       setStatus("PeerJS：" + text);
       if (onlineToken) return;
@@ -2162,10 +2179,10 @@
           peer._swordListening = true;
           peer.on("connection", bindOnlineBus);
         }
-        setStatus("房已開好。已連上 peerjs。等對手。");
+        setStatus("房已開好。已連上 peerjs（" + peer.id + "）。等對手。");
         return;
       }
-      setStatus("已連上 peerjs。正在搵房主。");
+      setStatus("已連上 peerjs。正在搵房主 " + guestHostId() + "。");
       connectGuest();
     });
   }
