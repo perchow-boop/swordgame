@@ -811,8 +811,6 @@
         return;
       }
     }
-    event.preventDefault();
-    unlockAudio();
     const point = canvasPoint(event);
     const own = hits(current, point);
     const other = players.find((player) => player !== current && hits(player, point));
@@ -820,6 +818,8 @@
       if (other) setStatus("未輪到" + other.name + "。而家係" + current.name + "射。");
       return;
     }
+    event.preventDefault();
+    unlockAudio();
     if (playPage && current.weapon && isLostWeapon(current, weaponKey(current.weapon))) {
       setStatus("呢把劍報廢咗，揀另一把先出手。");
       return;
@@ -1043,8 +1043,8 @@
 
   function aimHint() {
     return controlMode === "charge"
-      ? "撳住把劍任何位置，由撳落嗰點拉開。蓄力期間把劍唔會郁。放手嗰刻幾多力，就向反方向彈幾遠。"
-      : "水平慢推係撥，貼住枱面滑。撳住再快手甩開係彈，會短暫離地，撞到先翻。";
+      ? "撳實把劍向後拉蓄力（期間唔會郁），放手就按力度向反方向彈出。"
+      : "水平慢推係貼枱「撥」；撳實快手甩開係「彈」。";
   }
 
   function onUp(event) {
