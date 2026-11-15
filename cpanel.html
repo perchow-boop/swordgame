@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#8a4b24" />
+  <title>膠劍仔後台｜德和文具士多</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="book">
+    <header class="sign">
+      <p class="shop-name">德和文具士多 · 後台</p>
+      <h1>膠劍仔大戰</h1>
+      <p class="shop-line">校門口對面 · 斜向木桌對戰 · 買滿五蚊送膠套</p>
+      <a class="home-link" href="index.html">返回主畫面</a>
+      <a class="home-link" href="weapons.html">武器數值</a>
+    </header>
+
+    <div class="layout">
+      <section class="stage" aria-label="對戰枱面">
+        <canvas id="arena" width="1920" height="1080">你的瀏覽器不支援 Canvas。</canvas>
+        <div id="intro" class="veil">
+          <div class="poster">
+            <p class="eyebrow">德和文具士多呈獻</p>
+            <h2>點樣玩膠劍仔</h2>
+            <ol>
+              <li>兩個人輪流，每人只可以拖自己把劍。</li>
+              <li>水平慢推係「撥」，劍貼住枱面滑。撳住再快手甩開係「彈」，會短暫離地，撞到先翻同跳。</li>
+              <li>「蓄力彈」由撳落嗰點拉開，蓄力期間把劍唔會郁。蓄力條會升到 100% 再跌返 0，一直循環。放手嗰刻幾多力，劍就向拉嘅反方向彈幾遠。</li>
+              <li>兩把劍完全停低、貼返張枱之後先計輸贏。</li>
+              <li>邊把劍疊喺對手上面，邊個就贏一舖，並記低戰利品。一局要贏三舖。三局兩勝，先贏兩局就贏晒。</li>
+              <li>撳「打電腦」就一個人對住電腦輪流射。開波前可以揀普通或者困難。</li>
+            </ol>
+            <div class="mode-switch ai-pick" role="group" aria-label="電腦難度">
+              <button type="button" class="text-btn mode-btn" data-ai="normal" aria-pressed="true">普通</button>
+              <button type="button" class="text-btn mode-btn" data-ai="hard" aria-pressed="false">困難</button>
+            </div>
+            <p class="ai-note">普通出手有誤差。困難會先預判落點：重劍喺抓得住嘅地大力撞，滑地就精準疊上嚟。</p>
+            <button type="button" class="primary" id="start-btn">開波</button>
+          </div>
+        </div>
+        <div id="result" class="veil result-veil" hidden>
+          <div class="poster win-poster">
+            <div class="chop" aria-hidden="true">勝</div>
+            <h2 id="result-title">玩家一勝</h2>
+            <p id="result-detail"></p>
+            <button type="button" class="primary" id="again-btn">再鬥一舖</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="statusbar">
+      <p id="scoreline">第 1 局 · 玩家一 0 ： 0 玩家二 · 局數 0 ： 0</p>
+      <p id="status" aria-live="polite">撳「開波」開始。輪流拖自己把劍。</p>
+      <div class="status-actions">
+        <div class="mode-switch" role="group" aria-label="對戰人數">
+          <button type="button" class="text-btn mode-btn" id="match-duo" aria-pressed="true">雙人</button>
+          <button type="button" class="text-btn mode-btn" id="match-cpu" aria-pressed="false">打電腦</button>
+        </div>
+        <div class="mode-switch" role="group" aria-label="電腦難度">
+          <button type="button" class="text-btn mode-btn" data-ai="normal" aria-pressed="true">普通</button>
+          <button type="button" class="text-btn mode-btn" data-ai="hard" aria-pressed="false">困難</button>
+        </div>
+        <div class="mode-switch" role="group" aria-label="發射方式">
+          <button type="button" class="text-btn mode-btn" id="mode-flick" aria-pressed="true">撥／彈</button>
+          <button type="button" class="text-btn mode-btn" id="mode-charge" aria-pressed="false">蓄力彈</button>
+        </div>
+        <div class="mode-switch" role="group" aria-label="場地">
+          <button type="button" class="text-btn mode-btn" id="terrain-wood" aria-pressed="true">木桌</button>
+          <button type="button" class="text-btn mode-btn" id="terrain-terrazzo" aria-pressed="false">水磨石</button>
+          <button type="button" class="text-btn mode-btn" id="terrain-concrete" aria-pressed="false">水泥地</button>
+        </div>
+        <button type="button" class="text-btn" id="forge-toggle" aria-expanded="false" aria-controls="forge">武器調校</button>
+        <button type="button" class="text-btn" id="help-btn">點樣玩</button>
+        <button type="button" class="text-btn" id="mute-btn">聲效：開</button>
+        <button type="button" class="text-btn" id="clear-btn">清櫃</button>
+      </div>
+    </div>
+
+    <div class="teams">
+      <article class="card p1" id="card-p1">
+        <p class="eyebrow">紅隊</p>
+        <h2>玩家一</h2>
+        <p class="score">局數 <strong id="score-p1">0</strong> · 呢局 <strong id="points-p1">0</strong>/3</p>
+        <p class="shelf-label">價目 · 撳一下換劍</p>
+        <div class="weapons" id="weapons-p1"></div>
+        <div class="card-actions">
+          <button type="button" class="text-btn" id="reset-p1">擺返原位</button>
+          <button type="button" class="text-btn" id="upload-p1">上載 PNG</button>
+          <input id="file-p1" type="file" accept="image/png,image/webp" hidden />
+        </div>
+        <p class="shelf-label">戰利品</p>
+        <div class="loot" id="loot-p1">櫃桶仲係空</div>
+      </article>
+
+      <article class="card p2" id="card-p2">
+        <p class="eyebrow">藍隊</p>
+        <h2 id="title-p2">玩家二</h2>
+        <p class="score">局數 <strong id="score-p2">0</strong> · 呢局 <strong id="points-p2">0</strong>/3</p>
+        <p class="shelf-label">價目 · 撳一下換劍</p>
+        <div class="weapons" id="weapons-p2"></div>
+        <div class="card-actions">
+          <button type="button" class="text-btn" id="reset-p2">擺返原位</button>
+          <button type="button" class="text-btn" id="upload-p2">上載 PNG</button>
+          <input id="file-p2" type="file" accept="image/png,image/webp" hidden />
+        </div>
+        <p class="shelf-label">戰利品</p>
+        <div class="loot" id="loot-p2">櫃桶仲係空</div>
+      </article>
+    </div>
+
+    <p class="help">畫面係斜望落張士多木桌，劍斜放喺枱面。三局兩勝，每一局要疊贏三次。水平慢推係撥，貼枱滑行；快手甩開係彈，短暫離地，撞到會翻。「雙人」兩個人輪流；「打電腦」就由你對住電腦。「蓄力彈」由撳落嗰點拉開，蓄力期間把劍唔會郁，放手嗰刻嘅力度向反方向彈。換劍或者「擺返原位」只可以喺自己回合用。上載嘅去背 PNG 請令劍尖向右。</p>
+    <section class="desk forge" id="forge" hidden aria-label="武器調校工房">
+      <div class="desk-bar">
+        <h2>武器調校工房</h2>
+        <p id="forge-name">而家這把劍</p>
+      </div>
+      <div class="desk-body">
+        <div class="desk-col">
+          <label class="tune">
+            <span>重量</span>
+            <input id="forge-mass" type="range" min="1" max="40" step="0.1" value="8" />
+            <strong id="forge-mass-val">8.0</strong>
+          </label>
+          <p class="tune-note">即時改這把劍嘅質量。越重越難推走。</p>
+          <label class="tune">
+            <span>基準摩擦</span>
+            <input id="forge-friction" type="range" min="0.05" max="1" step="0.01" value="0.7" />
+            <strong id="forge-friction-val">0.70</strong>
+          </label>
+          <p class="tune-note">整把劍嘅基準。柄、刃、薄刃都跟住呢個數再乘自己嘅比例。</p>
+          <label class="tune">
+            <span>碰撞箱</span>
+            <input id="forge-hit" type="range" min="0.6" max="1.6" step="0.02" value="1" />
+            <strong id="forge-hit-val">1.00</strong>
+          </label>
+          <p class="tune-note">放大或縮小複合碰撞箱。枱面會即時畫出柄、刃、薄刃，白十字係重心。</p>
+          <p class="tune-note" id="forge-com">重心會偏去刃區</p>
+        </div>
+        <div class="desk-col">
+          <h3>分區手感</h3>
+          <label class="tune">
+            <span>柄摩擦</span>
+            <input id="forge-grip-friction" type="range" min="0.02" max="1.35" step="0.01" value="0.30" />
+            <strong id="forge-grip-friction-val">0.30</strong>
+          </label>
+          <label class="tune">
+            <span>柄彈力</span>
+            <input id="forge-grip-bounce" type="range" min="0" max="0.95" step="0.01" value="0.26" />
+            <strong id="forge-grip-bounce-val">0.26</strong>
+          </label>
+          <p class="tune-note">柄摩擦低，沿住枱面同另一把劍滑走。</p>
+          <label class="tune">
+            <span>刃摩擦</span>
+            <input id="forge-blade-friction" type="range" min="0.02" max="1.35" step="0.01" value="0.80" />
+            <strong id="forge-blade-friction-val">0.80</strong>
+          </label>
+          <label class="tune">
+            <span>刃彈力</span>
+            <input id="forge-blade-bounce" type="range" min="0" max="0.95" step="0.01" value="0.42" />
+            <strong id="forge-blade-bounce-val">0.42</strong>
+          </label>
+          <p class="tune-note">刀頭、劍身呢一截。重心會自動坐落呢度。</p>
+          <label class="tune">
+            <span>薄刃摩擦</span>
+            <input id="forge-edge-friction" type="range" min="0.02" max="1.35" step="0.01" value="1.35" />
+            <strong id="forge-edge-friction-val">1.35</strong>
+          </label>
+          <label class="tune">
+            <span>薄刃彈力</span>
+            <input id="forge-edge-bounce" type="range" min="0" max="0.95" step="0.01" value="0.16" />
+            <strong id="forge-edge-bounce-val">0.16</strong>
+          </label>
+          <p class="tune-note">薄刃摩擦高、彈力低，疊上去容易卡住，唔會彈走。</p>
+        </div>
+      </div>
+    </section>
+    <section class="desk" id="desk" aria-label="後台">
+      <div class="desk-bar">
+        <h2>後台</h2>
+        <p>拉一拉即時改摩擦力、發射、彈跳同勝負判定。下面係兩把劍嘅實時數據。</p>
+        <div class="status-actions">
+          <button type="button" class="text-btn" id="desk-toggle" aria-expanded="true" aria-controls="desk-body">收起</button>
+          <button type="button" class="text-btn" id="desk-reset">回復預設</button>
+        </div>
+      </div>
+      <div class="desk-body" id="desk-body">
+        <div class="desk-col">
+          <h3>摩擦力</h3>
+          <label class="tune">
+            <span>枱面阻力</span>
+            <input id="tune-table-air" type="range" min="0" max="0.25" step="0.005" value="0.1" />
+            <strong id="tune-table-air-val">0.100</strong>
+          </label>
+          <p class="tune-note">劍貼住枱面慢滑時，每帧減幾多速度。輕推會用呢個，越大越快停。</p>
+          <label class="tune">
+            <span>飛行阻力</span>
+            <input id="tune-flight-air" type="range" min="0" max="0.08" step="0.005" value="0.015" />
+            <strong id="tune-flight-air-val">0.015</strong>
+          </label>
+          <p class="tune-note">跳起嗰陣嘅空氣阻力。</p>
+          <label class="tune">
+            <span>劍身摩擦</span>
+            <input id="tune-sword-friction" type="range" min="0" max="1" step="0.01" value="0.8" />
+            <strong id="tune-sword-friction-val">0.80</strong>
+          </label>
+          <p class="tune-note">兩把劍喺枱面撞到、磨到嘅動摩擦。</p>
+          <label class="tune">
+            <span>靜摩擦</span>
+            <input id="tune-sword-static" type="range" min="0" max="1.5" step="0.01" value="1.05" />
+            <strong id="tune-sword-static-val">1.05</strong>
+          </label>
+          <p class="tune-note">停低或者疊穩之後先咬住。力未夠呢個門檻，就會慢慢滑。</p>
+          <label class="tune">
+            <span>牆邊摩擦</span>
+            <input id="tune-wall-friction" type="range" min="0" max="1" step="0.01" value="0.4" />
+            <strong id="tune-wall-friction-val">0.40</strong>
+          </label>
+          <p class="tune-note">劍撞到桌邊之後，沿住邊磨行。</p>
+          <h3>疊劍滑落</h3>
+          <label class="tune">
+            <span>疊面阻力</span>
+            <input id="tune-stack-air" type="range" min="0" max="0.3" step="0.005" value="0.015" />
+            <strong id="tune-stack-air-val">0.015</strong>
+          </label>
+          <p class="tune-note">疊喺對方上面嗰陣，上面把劍自己點減速。</p>
+          <label class="tune">
+            <span>相對滑阻</span>
+            <input id="tune-stack-slide" type="range" min="0" max="0.4" step="0.005" value="0.035" />
+            <strong id="tune-stack-slide-val">0.035</strong>
+          </label>
+          <p class="tune-note">疊住之後嘅動摩擦力。貼平又慢就靜止，接觸斜或者力大就慢慢滑落。0 係照滑。</p>
+          <label class="tune">
+            <span>滑落重疊</span>
+            <input id="tune-overlap" type="range" min="200" max="2500" step="10" value="850" />
+            <strong id="tune-overlap-val">850</strong>
+          </label>
+          <p class="tune-note">計實際劍身交疊面積。預設 850 對應大約 40。</p>
+          <label class="tune">
+            <span>疊高</span>
+            <input id="tune-stack-h" type="range" min="6" max="48" step="1" value="18" />
+            <strong id="tune-stack-h-val">18</strong>
+          </label>
+          <p class="tune-note">疊住之後，上面把劍抬高幾多像素。</p>
+        </div>
+        <div class="desk-col">
+          <h3>發射</h3>
+          <label class="tune">
+            <span>拉動上限</span>
+            <input id="tune-max-drag" type="range" min="80" max="320" step="5" value="165" />
+            <strong id="tune-max-drag-val">165</strong>
+          </label>
+          <p class="tune-note">手指最多拉幾遠。越長，蓄力同順手彈都可以拉得更盡。</p>
+          <label class="tune">
+            <span>順手力度</span>
+            <input id="tune-flick-power" type="range" min="0.04" max="0.25" step="0.01" value="0.11" />
+            <strong id="tune-flick-power-val">0.11</strong>
+          </label>
+          <p class="tune-note">順手彈：拉動距離變成飛行速度嘅倍數。</p>
+          <label class="tune">
+            <span>出手門檻</span>
+            <input id="tune-min-speed" type="range" min="0.4" max="8" step="0.1" value="2.2" />
+            <strong id="tune-min-speed-val">2.2</strong>
+          </label>
+          <p class="tune-note">慢過呢個速度就當冇彈到，劍留喺原位。</p>
+          <label class="tune">
+            <span>速度上限</span>
+            <input id="tune-max-speed" type="range" min="8" max="28" step="0.5" value="18" />
+            <strong id="tune-max-speed-val">18.0</strong>
+          </label>
+          <p class="tune-note">劍最快飛幾多。蓄力彈拉盡就係呢個速度。</p>
+          <label class="tune">
+            <span>蓄滿時間</span>
+            <input id="tune-charge-ms" type="range" min="300" max="2000" step="50" value="900" />
+            <strong id="tune-charge-ms-val">900</strong>
+          </label>
+          <p class="tune-note">由 0 升到 100 要幾多毫秒。到滿格會倒退落 0，再升返，一直循環。放手嗰刻嘅百分比就係力度。</p>
+          <label class="tune">
+            <span>蓄力條速度</span>
+            <input id="tune-charge-speed" type="range" min="0.3" max="3" step="0.05" value="1" />
+            <strong id="tune-charge-speed-val">1.00</strong>
+          </label>
+          <p class="tune-note">蓄力條上落幾快。1 係跟住上面嘅蓄滿時間，越大上落越快。</p>
+          <label class="tune">
+            <span>轉劍上限</span>
+            <input id="tune-spin-cap" type="range" min="0.04" max="0.4" step="0.01" value="0.16" />
+            <strong id="tune-spin-cap-val">0.16</strong>
+          </label>
+          <p class="tune-note">出手之後每帧最多轉幾多角度。</p>
+        </div>
+        <div class="desk-col">
+          <h3>彈跳</h3>
+          <label class="tune">
+            <span>落枱重力</span>
+            <input id="tune-z-gravity" type="range" min="0.1" max="1.2" step="0.02" value="0.52" />
+            <strong id="tune-z-gravity-val">0.52</strong>
+          </label>
+          <p class="tune-note">劍跳起之後，幾快跌返落枱。</p>
+          <label class="tune">
+            <span>劍身彈力</span>
+            <input id="tune-restitution" type="range" min="0" max="0.9" step="0.01" value="0.42" />
+            <strong id="tune-restitution-val">0.42</strong>
+          </label>
+          <p class="tune-note">撞到另一把劍，平面上彈開幾多。大力先會再跳起同翻。</p>
+          <label class="tune">
+            <span>牆邊彈力</span>
+            <input id="tune-wall-bounce" type="range" min="0" max="0.9" step="0.01" value="0.34" />
+            <strong id="tune-wall-bounce-val">0.34</strong>
+          </label>
+          <p class="tune-note">撞到桌邊之後彈返入去幾多。</p>
+          <label class="tune">
+            <span>起飛初速</span>
+            <input id="tune-hop" type="range" min="0" max="8" step="0.1" value="0" />
+            <strong id="tune-hop-val">0.0</strong>
+          </label>
+          <p class="tune-note">出手垂直速度。預設 0，輕推同大力都貼住枱面。撞到先跳。</p>
+          <label class="tune">
+            <span>越快越高</span>
+            <input id="tune-hop-scale" type="range" min="0" max="0.8" step="0.02" value="0.04" />
+            <strong id="tune-hop-scale-val">0.04</strong>
+          </label>
+          <p class="tune-note">快過滑行門檻之後，先把多出嚟嘅速度轉成少少垂直速度。</p>
+          <h3>勝負判定</h3>
+          <label class="tune">
+            <span>停穩先計</span>
+            <input id="tune-quiet" type="range" min="4" max="60" step="1" value="18" />
+            <strong id="tune-quiet-val">18</strong>
+          </label>
+          <p class="tune-note">兩把劍停低幾多帧之後，先開始判疊定輸贏。</p>
+          <label class="tune">
+            <span>疊穩先贏</span>
+            <input id="tune-stable" type="range" min="2" max="40" step="1" value="10" />
+            <strong id="tune-stable-val">10</strong>
+          </label>
+          <p class="tune-note">疊住要維持幾多帧先算贏。</p>
+          <label class="tune">
+            <span>無人疊換人</span>
+            <input id="tune-turn" type="range" min="12" max="120" step="1" value="36" />
+            <strong id="tune-turn-val">36</strong>
+          </label>
+          <p class="tune-note">停低但未疊到，幾多帧之後換下一個人射。</p>
+        </div>
+        <div class="desk-col desk-live">
+          <h3>即時數據</h3>
+          <dl class="desk-read">
+            <div><dt>重疊 / 門檻</dt><dd id="read-overlap">0 / 850</dd></div>
+            <div><dt>相對滑速</dt><dd id="read-rel">0.00 px/帧</dd></div>
+            <div><dt>疊住狀態</dt><dd id="read-state">未疊</dd></div>
+            <div><dt>滑落餘量</dt><dd id="read-margin">—</dd></div>
+            <div><dt>已滑距離</dt><dd id="read-dist">0 px</dd></div>
+            <div><dt>玩家一</dt><dd id="read-p1">—</dd></div>
+            <div><dt>玩家二</dt><dd id="read-p2">—</dd></div>
+            <div><dt>上次滑落</dt><dd id="read-slip">未滑過</dd></div>
+          </dl>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="weapon-store.js"></script>
+  <script src="matter.min.js"></script>
+  <script src="main.js?v=wood"></script>
+</body>
+</html>
