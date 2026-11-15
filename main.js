@@ -402,7 +402,9 @@
   }
   if (rolled.length && launchMode === "online") {
     onlineDrafts[onlineSeat] = rolled.slice(0, 3);
-    applySeatLoadout(onlineSeat === "p2" ? p2 : p1, onlineDrafts[onlineSeat]);
+    try {
+      applySeatLoadout(onlineSeat === "p2" ? p2 : p1, onlineDrafts[onlineSeat]);
+    } catch (error) {}
   } else if (rolled.length) applyDrawnLoadout(rolled);
   else if (launchMode === "cpu" && !picked) applyDrawnLoadout(drafted);
   if (!rolled.length && picked) {
@@ -1945,17 +1947,18 @@
     return Promise.race([attempt, timeout]);
   }
 
-  const onlinePeerSlots = ["", "a", "b", "c", "d", "e"];
-  let onlineHostSlot = 0;
-  let onlineGuestSlot = 0;
-
-  function onlinePeerId(seat, slot) {
-    const suffix = seat === "p1" ? onlinePeerSlots[slot == null ? onlineHostSlot : slot] || "" : "";
-    return "jj" + roomCode.toLowerCase() + seat + suffix;
+  function onlinePeerId(seat) {
+    return "jj" + roomCode.toLowerCase() + seat;
   }
 
-  function guestHostId() {
-    return "jj" + roomCode.toLowerCase() + "p1" + (onlinePeerSlots[onlineGuestSlot] || "");
+  function releasePeerConn(conn) {
+    const peer = onlinePeer;
+    if (!peer || !conn || !peer._connections || !conn.peer) return;
+    const list = peer._connections.get(conn.peer);
+    if (!list) return;
+    const next = list.filter((item) => item !== conn);
+    if (next.length) peer._connections.set(conn.peer, next);
+    else peer._connections.delete(conn.peer);
   }
 
   const onlineStunServers = [
@@ -2056,7 +2059,7 @@
 
   function guestRetryDelay(err) {
     const kind = err && err.type;
-    if (kind === "peer-unavailable" || kind === "connection-closed") return Math.min(1000 + onlineGuestAttempt * 450, 5000);
+    if (kind === "peer-unavailable" || kind === "connection-closed") return 1200;
     return 1800;
   }
 
@@ -2071,7 +2074,11 @@
 
   function connectGuest() {
     const peer = onlinePeer;
-    if (onlineToken || onlineSeat !== "p2" || !peer || peer.destroyed) return;
+    if (onlineToken || onlineSeat !== "p2") return;
+    if (!peer || peer.destroyed) {
+      if (!onlinePeerTimer) openOnlinePeer();
+      return;
+    }
     if (!peer.open) {
       scheduleGuestConnect(700);
       return;
@@ -2080,26 +2087,30 @@
     onlineGuestTimer = 0;
     const epoch = ++onlineGuestEpoch;
     onlineGuestAttempt += 1;
-    if (onlineGuestAttempt > 1 && onlineGuestFault) {
-      setStatus("PeerJS：" + onlineGuestFault + "。再試 " + guestHostId() + " 第 " + onlineGuestAttempt + " 次。");
+    const hostId = onlinePeerId("p1");
+    setStatus("等房主 " + hostId + "。PeerJS：" + (onlineGuestFault || "peer-unavailable") + "。第 " + onlineGuestAttempt + " 次。");
+    const conn = peer.connect(hostId, { reliable: true });
+    if (!conn) {
+      scheduleGuestConnect(1200);
+      return;
     }
-    const conn = peer.connect(guestHostId(), { reliable: true });
     onlineGuestConn = conn;
     let iceState = "";
     const current = () => epoch === onlineGuestEpoch && !onlineToken;
     const giveUp = (err, delay) => {
-      if (!current()) return;
+      if (!current()) return false;
       onlineGuestEpoch += 1;
       onlineGuestGiveUp = null;
-      if (err && err.type === "peer-unavailable") onlineGuestSlot = (onlineGuestSlot + 1) % onlinePeerSlots.length;
       if (err) {
         onlineGuestFault = peerErrorText(err);
-        setStatus("PeerJS：" + onlineGuestFault);
+        setStatus("等房主 " + onlinePeerId("p1") + "。PeerJS：" + onlineGuestFault + "。第 " + onlineGuestAttempt + " 次。");
       }
       if (onlineGuestConn === conn) onlineGuestConn = null;
       if (onlineBus === conn) onlineBus = null;
+      releasePeerConn(conn);
       try { conn.close(); } catch (error) {}
       scheduleGuestConnect(delay);
+      return true;
     };
     onlineGuestGiveUp = giveUp;
     conn.on("error", (err) => giveUp(err, guestRetryDelay(err)));
@@ -2115,7 +2126,7 @@
     window.setTimeout(() => {
       if (!current() || conn.open) return;
       if (iceState === "checking" || iceState === "connected" || iceState === "completed") return;
-      giveUp({ type: "peer-unavailable", message: "no-answer " + guestHostId() }, 400);
+      giveUp({ type: "peer-unavailable", message: "no-answer " + onlinePeerId("p1") }, 400);
     }, 6000);
     window.setTimeout(() => {
       if (current() && !conn.open) giveUp({ type: "webrtc", message: "timeout" }, 900);
@@ -2146,16 +2157,15 @@
       const text = peerErrorText(err);
       if (kind === "peer-unavailable") {
         onlineGuestFault = text;
-        setStatus("PeerJS：" + text);
-        if (onlineGuestGiveUp) onlineGuestGiveUp(err, guestRetryDelay(err));
-        else scheduleGuestConnect(guestRetryDelay(err));
+        if (!(onlineGuestGiveUp && onlineGuestGiveUp(err, guestRetryDelay(err)))) scheduleGuestConnect(guestRetryDelay(err));
         return;
       }
-      if (kind === "unavailable-id" && onlineSeat === "p1") {
-        onlineHostSlot = (onlineHostSlot + 1) % onlinePeerSlots.length;
+      if (kind === "unavailable-id") {
         peer._swordFault = "unavailable-id";
-        setStatus("PeerJS：unavailable-id。改掛 " + onlinePeerId("p1"));
-        reviveOnlinePeer(peer, onlineHostSlot === 0 ? 8000 : 400);
+        setStatus(onlineSeat === "p1"
+          ? "PeerJS：unavailable-id。房主號 " + onlinePeerId("p1") + " 仍被佔用，稍後再掛。"
+          : "PeerJS：unavailable-id");
+        reviveOnlinePeer(peer, 3000);
         return;
       }
       peer._swordFault = text;
@@ -2182,7 +2192,7 @@
         setStatus("房已開好。已連上 peerjs（" + peer.id + "）。等對手。");
         return;
       }
-      setStatus("已連上 peerjs。正在搵房主 " + guestHostId() + "。");
+      setStatus("已連上 peerjs。正在搵房主 " + onlinePeerId("p1") + "。");
       connectGuest();
     });
   }
@@ -2227,9 +2237,27 @@
   function onlineBegin() {
     onlineReady = false;
     setStatus(onlineWeapon === "random" ? "已隨機派三種劍。正在入房。" : "你抽咗三包。正在入房。");
+    let useHttp = false;
     probeLocalRoom().then((ok) => {
-      if (ok) onlineBeginHttp();
-      else onlineBeginPeer();
+      if (!ok) return;
+      useHttp = true;
+      window.clearTimeout(onlineGuestTimer);
+      window.clearTimeout(onlinePeerTimer);
+      onlineGuestTimer = 0;
+      onlinePeerTimer = 0;
+      onlineGuestGiveUp = null;
+      const peer = onlinePeer;
+      onlinePeer = null;
+      if (peer && !peer.destroyed) {
+        try { peer.destroy(); } catch (error) {}
+      }
+      onlineBeginHttp();
+    });
+    loadPeerLibrary().then(() => {
+      if (useHttp || onlineToken) return;
+      if (!onlinePeer || onlinePeer.destroyed) openOnlinePeer();
+    }).catch((err) => {
+      if (!useHttp) setStatus("PeerJS：" + (err && err.message ? err.message : "load ./lib/peerjs.min.js"));
     });
   }
 
