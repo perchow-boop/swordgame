@@ -411,6 +411,8 @@
     applyMatchMode(launchMode);
     startMatch();
     if (launchMode === "online") onlineBegin();
+  } else if (!playPage) {
+    startMatch();
   }
   paintPlayBrief();
 
@@ -479,22 +481,16 @@
     const paused = !intro.hidden || phase === "result" || (pauseBox && !pauseBox.hidden);
     if (!paused && !(onlineGuest() && onlineToken)) {
       fireCpuShot(now);
-      stepAltitude();
-      acc += dt;
-      let steps = 0;
-      while (acc >= STEP && steps < 5) {
-        for (let i = 0; i < SUBSTEPS; i += 1) Engine.update(engine, STEP / SUBSTEPS);
-        acc -= STEP;
-        steps += 1;
-      }
-      if (acc > STEP) acc = 0;
+      stepWorld(dt);
       noteMotion();
       noteIdleCover();
+    } else if (!paused && onlineGuest() && phase === "fly") {
+      stepWorld(dt);
     } else {
       acc = 0;
     }
-    if (onlineHost()) onlineMaybePublish(now);
-    if (onlineWait && now - onlineWaitAt > 2500) onlineWait = false;
+    if (onlineWait && phase !== "fly" && now - onlineWaitAt > 2500) onlineWait = false;
+    if (onlineWait && now - onlineWaitAt > 15000) onlineWait = false;
     render(now);
     updateDesk();
     requestAnimationFrame(frame);
@@ -1156,7 +1152,19 @@
     Body.setAngle(body, state.startAngle);
     const spin = controlMode === "charge" ? chargeSpin(state, vx, vy, impulse.power || 0) : flickSpin(state, vx, vy);
     const stroke = controlMode === "charge" ? "flick" : strokeKind(state);
-    launchSword(state.player, vx, vy, spin, stroke);
+    launchSword(state.player, vx, vy, spin, stroke, false, state.anchor);
+  }
+
+  function stepWorld(dt) {
+    stepAltitude();
+    acc += dt;
+    let steps = 0;
+    while (acc >= STEP && steps < 5) {
+      for (let i = 0; i < SUBSTEPS; i += 1) Engine.update(engine, STEP / SUBSTEPS);
+      acc -= STEP;
+      steps += 1;
+    }
+    if (acc > STEP) acc = 0;
   }
 
   function strokeKind(state) {
@@ -1169,24 +1177,34 @@
     return "swipe";
   }
 
-  function launchSword(player, vx, vy, spin, stroke) {
+  function launchPacket(player, vx, vy, spin, stroke, anchor) {
+    const body = player.body;
+    const point = anchor || body.position;
+    return {
+      type: "launch",
+      seat: player.id,
+      x: onlineRound(body.position.x),
+      y: onlineRound(body.position.y),
+      a: onlineRound(body.angle),
+      px: onlineRound(point.x),
+      py: onlineRound(point.y),
+      vx: onlineRound(vx),
+      vy: onlineRound(vy),
+      spin: onlineRound(spin),
+      stroke: stroke || "flick",
+      weapon: catalogIndex(player, player.weapon),
+    };
+  }
+
+  function launchSword(player, vx, vy, spin, stroke, remote, anchor) {
     if (playPage && (!player.weapon || isLostWeapon(player, weaponKey(player.weapon)))) {
       setStatus("揀把未報廢嘅劍先出手。");
       return;
     }
-    if (onlineGuest()) {
-      onlinePush({
-        type: "launch",
-        vx: vx,
-        vy: vy,
-        spin: spin,
-        stroke: stroke || "flick",
-        weapon: catalogIndex(player, player.weapon),
-      });
+    if (!remote && (onlineHost() || onlineGuest())) onlinePush(launchPacket(player, vx, vy, spin, stroke, anchor));
+    if (onlineGuest() && !remote) {
       onlineWait = true;
       onlineWaitAt = performance.now();
-      setStatus("出手已送到房主。");
-      return;
     }
     const body = player.body;
     const speed = Math.hypot(vx, vy);
@@ -1224,7 +1242,6 @@
     if (playPage) player.lockedId = weaponKey(player.weapon);
     setStatus(player.stroke === "swipe" ? "撥：貼住枱面推過去。" : "彈：出手離地，撞到會翻。");
     syncHud();
-    if (onlineHost()) onlinePublish(true);
   }
 
   function isCpu(player) {
@@ -1778,13 +1795,6 @@
     onlinePush(message);
   }
 
-  function onlineMaybePublish(now) {
-    if (!onlineReady) return;
-    const gap = phase === "fly" ? 80 : 280;
-    if (now - onlineLastPush < gap) return;
-    onlinePublish(false);
-  }
-
   function applyOnlineBody(player, data) {
     if (!data || !player.body) return;
     Body.setPosition(player.body, { x: data.x, y: data.y });
@@ -1795,7 +1805,7 @@
     player.zVel = data.zv || 0;
     player.airborne = !!data.air;
     player.landedOn = data.on === "p1" ? p1 : data.on === "p2" ? p2 : null;
-    Sleeping.set(player.body, false);
+    Sleeping.set(player.body, phase !== "fly");
   }
 
   function applyOnlineEquip(player, index) {
@@ -1838,8 +1848,22 @@
       resultBox.hidden = true;
     }
     if (message.status) setStatus(message.status);
-    if (phase !== "aim") onlineWait = false;
+    onlineWait = false;
     syncHud();
+  }
+
+  function applyRemoteLaunch(message) {
+    const player = message.seat === "p1" ? p1 : message.seat === "p2" ? p2 : onlineHost() ? p2 : p1;
+    if (!onlineToken || player.id === onlineSeat || phase !== "aim") return;
+    const weapon = weaponList(player)[message.weapon];
+    if (weapon && (!player.weapon || weaponKey(weapon) !== weaponKey(player.weapon))) arm(player, weapon);
+    if (player.body && message.x != null) {
+      Body.setPosition(player.body, { x: message.x, y: message.y });
+      Body.setAngle(player.body, message.a || 0);
+      Body.setVelocity(player.body, { x: 0, y: 0 });
+      Body.setAngularVelocity(player.body, 0);
+    }
+    launchSword(player, message.vx || 0, message.vy || 0, message.spin || 0, message.stroke || "flick", true);
   }
 
   function onlineInbox(message) {
@@ -1863,16 +1887,14 @@
       applyOnlineState(message);
       return;
     }
+    if (message.type === "launch") {
+      applyRemoteLaunch(message);
+      return;
+    }
     if (!onlineHost()) return;
     if (message.type === "select") {
       const weapon = weaponList(p2)[message.index];
       if (weapon) selectWeapon(p2, weapon, true);
-      return;
-    }
-    if (message.type === "launch" && current === p2 && phase === "aim") {
-      const weapon = weaponList(p2)[message.weapon];
-      if (weapon && (!p2.weapon || weaponKey(weapon) !== weaponKey(p2.weapon))) arm(p2, weapon);
-      launchSword(p2, message.vx, message.vy, message.spin, message.stroke || "flick");
       return;
     }
     if (message.type === "next" && phase === "result") {
@@ -1922,7 +1944,7 @@
     if (window.Peer) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = "https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js";
+      script.src = "./lib/peerjs.min.js";
       script.onload = () => resolve();
       script.onerror = () => reject(new Error("peer"));
       document.head.appendChild(script);
@@ -2161,6 +2183,7 @@
     const next = current === p1 ? p2 : p1;
     setStatus(verdict === "tie" ? "兩把劍纏住，未分到勝負。換人再射。" : "未疊到。輪到" + next.name + "。");
     setTurn(next);
+    if (onlineHost()) onlinePublish(true);
   }
 
   function noteIdleCover() {
@@ -3485,14 +3508,14 @@
   }
 
   function collapseTouchShelf() {
-    if (!document.body.classList.contains("is-touch")) return;
+    if (!playPage) return;
     document.body.classList.add("is-shelf-collapsed");
     const tab = document.getElementById("shelf-tab");
     if (tab) tab.setAttribute("aria-expanded", "false");
   }
 
   function bindTouchShelf() {
-    if (!document.body.classList.contains("is-touch")) return;
+    if (!playPage) return;
     const tab = document.getElementById("shelf-tab");
     if (tab) {
       tab.addEventListener("click", () => {
@@ -3501,6 +3524,7 @@
         tab.setAttribute("aria-expanded", open ? "true" : "false");
       });
     }
+    if (!document.body.classList.contains("is-touch")) return;
     document.querySelectorAll(".play-body .weapons").forEach(bindShelfScroll);
     canvas.addEventListener("touchstart", (event) => event.preventDefault(), { passive: false });
     document.addEventListener("selectstart", (event) => event.preventDefault());
