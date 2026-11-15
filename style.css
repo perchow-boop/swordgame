@@ -1172,7 +1172,7 @@ body.play-body {
   flex: 1 1 0;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto;
   justify-items: center;
   text-align: center;
   padding: 3px 2px;
@@ -1184,8 +1184,9 @@ body.play-body {
   height: 24px;
 }
 
-.play-body .weapon .wname,
-.play-body .weapon .wprice {
+.play-body .weapon .wprice { display: none; }
+
+.play-body .weapon .wname {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1316,11 +1317,15 @@ body.play-body {
 }
 
 @media (max-height: 520px) {
-  .play-shell { padding-left: 0; padding-right: 0; }
+  .play-shell {
+    gap: 4px;
+    padding: 4px 0 4px;
+  }
   .play-hud,
   .play-shelves { padding-left: 6px; padding-right: 6px; }
   .play-stage {
     position: relative;
+    z-index: 0;
     background: #07080c;
     box-shadow: none;
   }
@@ -1335,6 +1340,79 @@ body.play-body {
     aspect-ratio: 16 / 9;
     border-radius: 0;
     transform: translateY(-50%);
+  }
+  .play-shelves {
+    position: relative;
+    z-index: 1;
+    gap: 4px;
+    padding-top: 0;
+  }
+  .play-body .card {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    align-items: center;
+    column-gap: 6px;
+    row-gap: 2px;
+    padding: 3px 4px;
+  }
+  .play-body .card::before { display: none; }
+  .play-body .eyebrow { grid-column: 1; grid-row: 1; font-size: 12px; }
+  .play-body .card h2,
+  .play-body .score,
+  .play-body .loot,
+  .play-body .weapon .wname,
+  .play-body .weapon .wprice { display: none; }
+  .play-body .card-actions {
+    grid-column: 1;
+    grid-row: 2;
+    margin: 0;
+  }
+  .play-body .card-actions .text-btn {
+    min-height: 0;
+    padding: 1px 4px;
+    font-size: 11px;
+  }
+  .play-body .weapons {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-items: center;
+  }
+  .play-body .weapon { padding: 1px; }
+  .play-body .weapon .wicon {
+    width: 100%;
+    height: 26px;
+  }
+  .play-pause {
+    overflow: auto;
+    align-items: start;
+    padding: 12px 12px 20px;
+  }
+  .play-stage .veil {
+    position: fixed;
+    inset: 0;
+    z-index: 8;
+    overflow: auto;
+    align-items: start;
+    justify-items: center;
+    padding: 12px 12px 20px;
+    border-radius: 0;
+  }
+  .play-stage .poster {
+    width: min(560px, 100%);
+    padding: 10px 12px 12px;
+  }
+  .play-stage .poster h2 {
+    font-size: 28px;
+    margin-bottom: 4px;
+  }
+  .play-stage .poster ol {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  .play-stage .poster .primary {
+    margin-top: 8px;
+    padding: 6px 18px;
+    font-size: 26px;
   }
 }
 

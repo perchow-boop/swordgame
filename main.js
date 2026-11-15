@@ -2839,10 +2839,13 @@
       const name = document.createElement("span");
       name.className = "wname";
       name.textContent = shelfLabel(list, weapon);
-      const price = document.createElement("span");
-      price.className = "wprice";
-      price.textContent = weapon.price;
-      button.append(icon, name, price);
+      button.append(icon, name);
+      if (!playPage) {
+        const price = document.createElement("span");
+        price.className = "wprice";
+        price.textContent = weapon.price;
+        button.append(price);
+      }
       drawWeaponFit(icon.getContext("2d"), weapon, 86, 32);
       player.weaponHost.appendChild(button);
     }
