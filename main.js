@@ -151,6 +151,11 @@
   let onlineGuestConn = null;
   let onlineGuestGiveUp = null;
   let onlineGuestFault = "";
+  let onlineClientId = "";
+  let onlineRelaySocket = null;
+  let onlineRelayTimer = 0;
+  let onlineRelayAttempt = 0;
+  let onlinePreferHttp = false;
   let onlineWait = false;
   let onlineWaitAt = 0;
   let onlineSawPeer = false;
@@ -1880,6 +1885,9 @@
   function onlineInbox(message) {
     if (!message || !message.type) return;
     if (message.type === "hello") {
+      if (message.seat !== onlineSeat && onlineDrafts[onlineSeat]) {
+        onlinePush({ type: "draft", seat: onlineSeat, ids: onlineDrafts[onlineSeat] });
+      }
       if (onlineHost()) beginOnlineFight();
       return;
     }
@@ -1964,18 +1972,10 @@
   const onlineStunServers = [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun.cloudflare.com:3478" },
   ];
-  // 公開 TURN。要再加免費中繼，在這個陣列追加 { urls, username, credential }。
-  const onlineTurnServers = [
-    {
-      urls: [
-        "turn:eu-0.turn.peerjs.com:3478",
-        "turn:us-0.turn.peerjs.com:3478",
-      ],
-      username: "peerjs",
-      credential: "peerjsp",
-    },
-  ];
+  // 要加免費 TURN，在這個陣列追加 { urls, username, credential }。
+  const onlineTurnServers = [];
 
   function onlinePeerOptions() {
     return {
@@ -2026,10 +2026,7 @@
       onlineOutbox.splice(0).forEach((message) => {
         try { conn.send(message); } catch (error) {}
       });
-      if (onlineDrafts[onlineSeat]) onlinePush({ type: "draft", seat: onlineSeat, ids: onlineDrafts[onlineSeat] });
-      onlinePush({ type: "hello", seat: onlineSeat });
-      setStatus(onlineWeapon === "random" ? "已隨機派三種劍。等對手都準備好先開波。" : "你抽咗三包。等對手都準備好先開波。");
-      if (onlineSeat === "p1") beginOnlineFight();
+      announceOnline();
     });
     conn.on("error", (err) => {
       if (onlineGuestConn !== conn && onlineBus !== conn) return;
@@ -2234,30 +2231,178 @@
       });
   }
 
+  function announceOnline() {
+    if (onlineDrafts[onlineSeat]) onlinePush({ type: "draft", seat: onlineSeat, ids: onlineDrafts[onlineSeat] });
+    onlinePush({ type: "hello", seat: onlineSeat });
+    setStatus(onlineWeapon === "random" ? "已隨機派三種劍。等對手都準備好先開波。" : "你抽咗三包。等對手都準備好先開波。");
+    if (onlineSeat === "p1") beginOnlineFight();
+  }
+
+  function mqttConcat(parts) {
+    let size = 0;
+    parts.forEach((part) => { size += part.length; });
+    const out = new Uint8Array(size);
+    let offset = 0;
+    parts.forEach((part) => {
+      out.set(part, offset);
+      offset += part.length;
+    });
+    return out;
+  }
+
+  function mqttStr(text) {
+    const bytes = new TextEncoder().encode(text);
+    const out = new Uint8Array(2 + bytes.length);
+    out[0] = bytes.length >> 8;
+    out[1] = bytes.length & 255;
+    out.set(bytes, 2);
+    return out;
+  }
+
+  function mqttVarInt(value) {
+    const out = [];
+    let left = value;
+    do {
+      let digit = left % 128;
+      left = Math.floor(left / 128);
+      if (left > 0) digit += 128;
+      out.push(digit);
+    } while (left > 0);
+    return new Uint8Array(out);
+  }
+
+  function mqttPacket(type, body) {
+    return mqttConcat([new Uint8Array([type]), mqttVarInt(body.length), body]);
+  }
+
+  function mqttTake(buf) {
+    if (buf.length < 2) return null;
+    let multiplier = 1;
+    let length = 0;
+    let index = 1;
+    let digit = 0;
+    do {
+      if (index >= buf.length) return null;
+      digit = buf[index];
+      index += 1;
+      length += (digit & 127) * multiplier;
+      multiplier *= 128;
+    } while (digit & 128);
+    if (buf.length < index + length) return null;
+    return {
+      packet: { type: buf[0] >> 4, body: buf.slice(index, index + length) },
+      rest: buf.slice(index + length),
+    };
+  }
+
+  function onlineTopic() {
+    return "swordgame/" + roomCode.toLowerCase();
+  }
+
+  function closeOnlineRelay() {
+    window.clearInterval(onlineRelayTimer);
+    onlineRelayTimer = 0;
+    const socket = onlineRelaySocket;
+    onlineRelaySocket = null;
+    if (socket) {
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      try { socket.close(); } catch (error) {}
+    }
+  }
+
+  function handleRelayPacket(socket, packet) {
+    if (onlinePreferHttp || onlineRelaySocket !== socket) return;
+    if (packet.type === 2) {
+      if (!packet.body.length || packet.body[1] !== 0) {
+        setStatus("入房失敗。");
+        return;
+      }
+      const topic = onlineTopic();
+      socket.send(mqttPacket(0x82, mqttConcat([new Uint8Array([0, 1]), mqttStr(topic), new Uint8Array([0])])));
+      return;
+    }
+    if (packet.type === 9) {
+      onlineToken = onlineClientId;
+      try {
+        sessionStorage.setItem("sword-room-" + roomCode + "-" + onlineSeat, onlineToken);
+      } catch (error) {}
+      onlineBus = {
+        open: true,
+        send(message) {
+          if (onlineRelaySocket !== socket || socket.readyState !== 1) return;
+          const text = JSON.stringify(Object.assign({ src: onlineClientId }, message));
+          socket.send(mqttPacket(0x30, mqttConcat([mqttStr(onlineTopic()), new TextEncoder().encode(text)])));
+        },
+      };
+      if (!onlineRelayTimer) {
+        onlineRelayTimer = window.setInterval(() => {
+          if (onlineRelaySocket === socket && socket.readyState === 1) socket.send(new Uint8Array([0xc0, 0]));
+        }, 20000);
+      }
+      announceOnline();
+      return;
+    }
+    if (packet.type !== 3) return;
+    const topicLength = (packet.body[0] << 8) | packet.body[1];
+    const text = new TextDecoder().decode(packet.body.slice(2 + topicLength));
+    let message = null;
+    try { message = JSON.parse(text); } catch (error) { return; }
+    if (!message || message.src === onlineClientId || !message.type) return;
+    delete message.src;
+    onlineInbox(message);
+  }
+
+  function onlineBeginRelay() {
+    if (onlinePreferHttp) return;
+    closeOnlineRelay();
+    onlineClientId = "jj" + Math.random().toString(36).slice(2, 10);
+    const socket = new WebSocket("wss://broker.hivemq.com:8884/mqtt", ["mqtt"]);
+    onlineRelaySocket = socket;
+    socket.binaryType = "arraybuffer";
+    let pending = new Uint8Array(0);
+    socket.onopen = () => {
+      if (onlinePreferHttp || onlineRelaySocket !== socket) return;
+      socket.send(mqttPacket(0x10, mqttConcat([
+        mqttStr("MQTT"),
+        new Uint8Array([4, 2, 0, 30]),
+        mqttStr(onlineClientId),
+      ])));
+    };
+    socket.onmessage = (event) => {
+      const chunk = new Uint8Array(event.data);
+      const next = new Uint8Array(pending.length + chunk.length);
+      next.set(pending, 0);
+      next.set(chunk, pending.length);
+      pending = next;
+      let taken = mqttTake(pending);
+      while (taken) {
+        pending = taken.rest;
+        handleRelayPacket(socket, taken.packet);
+        taken = mqttTake(pending);
+      }
+    };
+    socket.onerror = () => {
+      if (!onlinePreferHttp && onlineRelaySocket === socket && !onlineToken) setStatus("入房連線失敗。");
+    };
+    socket.onclose = () => {
+      if (onlineRelaySocket === socket) onlineRelaySocket = null;
+      if (onlinePreferHttp || onlineToken) return;
+      onlineRelayAttempt += 1;
+      if (onlineRelayAttempt < 3) window.setTimeout(onlineBeginRelay, 800);
+      else onlineBeginPeer();
+    };
+  }
+
   function onlineBegin() {
     onlineReady = false;
+    onlinePreferHttp = false;
     setStatus(onlineWeapon === "random" ? "已隨機派三種劍。正在入房。" : "你抽咗三包。正在入房。");
-    let useHttp = false;
     probeLocalRoom().then((ok) => {
-      if (!ok) return;
-      useHttp = true;
-      window.clearTimeout(onlineGuestTimer);
-      window.clearTimeout(onlinePeerTimer);
-      onlineGuestTimer = 0;
-      onlinePeerTimer = 0;
-      onlineGuestGiveUp = null;
-      const peer = onlinePeer;
-      onlinePeer = null;
-      if (peer && !peer.destroyed) {
-        try { peer.destroy(); } catch (error) {}
-      }
-      onlineBeginHttp();
-    });
-    loadPeerLibrary().then(() => {
-      if (useHttp || onlineToken) return;
-      if (!onlinePeer || onlinePeer.destroyed) openOnlinePeer();
-    }).catch((err) => {
-      if (!useHttp) setStatus("PeerJS：" + (err && err.message ? err.message : "load ./lib/peerjs.min.js"));
+      if (ok && launch.get("relay") !== "mqtt") onlineBeginHttp();
+      else onlineBeginRelay();
     });
   }
 
