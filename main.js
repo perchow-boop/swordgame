@@ -137,6 +137,9 @@
   let onlineReady = true;
   let onlineDrafts = { p1: null, p2: null };
   let onlineWeapon = "pack";
+  let onlineBus = null;
+  let onlinePeer = null;
+  let onlineOutbox = [];
   let onlineWait = false;
   let onlineWaitAt = 0;
   let onlineSawPeer = false;
@@ -362,6 +365,10 @@
   let onlineRedirecting = false;
   if (playPage && launchMode === "online" && onlineWeapon === "random" && rolled.length < 3) rolled = pickThreeWeaponIds();
   if (playPage && launchMode === "online" && onlineWeapon !== "random" && rolled.length < 3) {
+    const savedDraw = draftIds();
+    if (savedDraw.length >= 3) rolled = savedDraw.slice(0, 3);
+  }
+  if (playPage && launchMode === "online" && onlineWeapon !== "random" && rolled.length < 3) {
     onlineRedirecting = true;
     const back = new URLSearchParams();
     back.set("mode", "online");
@@ -370,14 +377,16 @@
     if (onlineSeat) back.set("seat", onlineSeat);
     const terrainId = launch.get("terrain") || "";
     if (terrainId) back.set("terrain", terrainId);
-    sessionStorage.setItem("sword-play-v1", JSON.stringify({
-      mode: "online",
-      terrain: terrainId,
-      ai: "",
-      room: roomCode,
-      seat: onlineSeat,
-      weapon: "pack",
-    }));
+    try {
+      sessionStorage.setItem("sword-play-v1", JSON.stringify({
+        mode: "online",
+        terrain: terrainId,
+        ai: "",
+        room: roomCode,
+        seat: onlineSeat,
+        weapon: "pack",
+      }));
+    } catch (error) {}
     window.location.replace("pack.html?" + back.toString());
   }
   if (rolled.length && launchMode === "online") {
@@ -1553,9 +1562,18 @@
     return Math.round(value * 100) / 100;
   }
 
+  function onlineEndpoint(path) {
+    return new URL(path.replace(/^\//, ""), window.location.href).toString();
+  }
+
   function onlinePush(message) {
     if (!onlineToken || !roomCode) return;
-    fetch("/api/online/send", {
+    if (onlineBus) {
+      if (onlineBus.open) onlineBus.send(message);
+      else onlineOutbox.push(message);
+      return;
+    }
+    fetch(onlineEndpoint("api/online/send"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ room: roomCode, token: onlineToken, message: message }),
@@ -1794,8 +1812,8 @@
   }
 
   function onlinePoll() {
-    if (!onlineToken) return;
-    fetch("/api/online/poll?room=" + encodeURIComponent(roomCode) + "&token=" + encodeURIComponent(onlineToken) + "&after=" + onlineAfter)
+    if (!onlineToken || onlineBus) return;
+    fetch(onlineEndpoint("api/online/poll?room=" + encodeURIComponent(roomCode) + "&token=" + encodeURIComponent(onlineToken) + "&after=" + onlineAfter))
       .then((res) => {
         if (!res.ok) throw new Error("poll");
         return res.json();
@@ -1815,10 +1833,99 @@
       });
   }
 
-  function onlineBegin() {
-    onlineReady = false;
-    const saved = sessionStorage.getItem("sword-room-" + roomCode + "-" + onlineSeat) || "";
-    fetch("/api/online/join", {
+  function probeLocalRoom() {
+    const attempt = fetch(onlineEndpoint("api/online/join"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room: roomCode, seat: "no" }),
+    }).then((res) => (res.headers.get("content-type") || "").toLowerCase().indexOf("json") >= 0).catch(() => false);
+    const timeout = new Promise((resolve) => window.setTimeout(() => resolve(false), 2000));
+    return Promise.race([attempt, timeout]);
+  }
+
+  function onlinePeerId(seat) {
+    return "jj" + roomCode.toLowerCase() + seat;
+  }
+
+  function loadPeerLibrary() {
+    if (window.Peer) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js";
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("peer"));
+      document.head.appendChild(script);
+    });
+  }
+
+  function bindOnlineBus(conn) {
+    onlineBus = conn;
+    conn.on("data", (data) => {
+      if (data && typeof data === "object" && data.type) onlineInbox(data);
+    });
+    conn.on("open", () => {
+      onlineToken = onlinePeer && onlinePeer.id ? onlinePeer.id : onlinePeerId(onlineSeat);
+      try {
+        sessionStorage.setItem("sword-room-" + roomCode + "-" + onlineSeat, onlineToken);
+      } catch (error) {}
+      onlineOutbox.splice(0).forEach((message) => {
+        try { conn.send(message); } catch (error) {}
+      });
+      if (onlineDrafts[onlineSeat]) onlinePush({ type: "draft", seat: onlineSeat, ids: onlineDrafts[onlineSeat] });
+      onlinePush({ type: "hello", seat: onlineSeat });
+      setStatus(onlineWeapon === "random" ? "已隨機派三種劍。等對手都準備好先開波。" : "你抽咗三包。等對手都準備好先開波。");
+      if (onlineSeat === "p1") beginOnlineFight();
+    });
+    conn.on("close", () => {
+      if (onlineBus === conn) onlineBus = null;
+      if (onlineReady) setStatus("同對手斷咗線。請兩邊再入房。");
+    });
+  }
+
+  function onlineBeginPeer() {
+    setStatus("呢頁冇房間伺服器，改為瀏覽器直連。等對手。");
+    loadPeerLibrary().then(() => {
+      const peer = onlineSeat === "p1" ? new window.Peer(onlinePeerId("p1")) : new window.Peer();
+      onlinePeer = peer;
+      window.addEventListener("pagehide", () => {
+        try { peer.destroy(); } catch (error) {}
+      });
+      peer.on("error", (err) => {
+        const kind = err && err.type;
+        if (kind === "unavailable-id") setStatus("呢個房號已經有人。請開新房。");
+        else if (kind === "peer-unavailable") return;
+        else if (!onlineToken) setStatus("連唔上對手。請兩邊都用同一個網址再開一次。");
+      });
+      peer.on("open", () => {
+        if (onlineSeat === "p1") {
+          peer.on("connection", bindOnlineBus);
+          setStatus("房已開好。等對手開完卡包入房。");
+          return;
+        }
+        const tryConnect = () => {
+          if (onlineToken || !onlinePeer) return;
+          const conn = peer.connect(onlinePeerId("p1"), { reliable: true });
+          bindOnlineBus(conn);
+          window.setTimeout(() => {
+            if (!onlineToken) {
+              try { conn.close(); } catch (error) {}
+              tryConnect();
+            }
+          }, 1600);
+        };
+        tryConnect();
+      });
+    }).catch(() => {
+      setStatus("連唔上線上房。請用遊戲伺服器開頁，或者保持網絡再試。");
+    });
+  }
+
+  function onlineBeginHttp() {
+    let saved = "";
+    try {
+      saved = sessionStorage.getItem("sword-room-" + roomCode + "-" + onlineSeat) || "";
+    } catch (error) {}
+    fetch(onlineEndpoint("api/online/join"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ room: roomCode, seat: onlineSeat, token: saved }),
@@ -1837,8 +1944,17 @@
         onlinePoll();
       })
       .catch(() => {
-        setStatus("連唔上線上房。請重新開遊戲伺服器。");
+        onlineBeginPeer();
       });
+  }
+
+  function onlineBegin() {
+    onlineReady = false;
+    setStatus(onlineWeapon === "random" ? "已隨機派三種劍。正在入房。" : "你抽咗三包。正在入房。");
+    probeLocalRoom().then((ok) => {
+      if (ok) onlineBeginHttp();
+      else onlineBeginPeer();
+    });
   }
 
   function applyMatchMode(mode) {
@@ -3751,7 +3867,7 @@
     b.fillStyle = "rgba(120, 36, 28, 0.5)";
     b.textAlign = "center";
     b.textBaseline = "middle";
-    b.fillText("德和", 0, 1);
+    b.fillText("吉利", 0, 1);
     b.restore();
 
     b.font = '20px "Ma Shan Zheng", "KaiTi", serif';
