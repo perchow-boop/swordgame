@@ -101,6 +101,8 @@
   const muteBtn = document.getElementById("mute-btn");
   const clearBtn = document.getElementById("clear-btn");
   const playPage = document.body.classList.contains("play-body");
+  const touchLayout = playPage && window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  if (touchLayout) document.body.classList.add("is-touch");
   const pauseBox = document.getElementById("pause");
 
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -777,7 +779,9 @@
     if (controlMode === "charge") {
       const hand = chargeHandPose(state);
       drawHand(fingerCharge, hand, 1, "tail");
-      drawPowerBar(hand.x - hand.backX * 24 + hand.backY * 58, hand.y - hand.backY * 24 - hand.backX * 58, impulse.power || 0);
+      if (!state.touchCharge) {
+        drawPowerBar(hand.x - hand.backX * 24 + hand.backY * 58, hand.y - hand.backY * 24 - hand.backX * 58, impulse.power || 0);
+      }
     } else if (impulse.speed > 0.8) {
       const pointer = flickPointerPose(state);
       ctx.save();
@@ -792,6 +796,62 @@
       );
       ctx.restore();
     }
+    if (state.touchCharge) drawTouchChargeCue(state, impulse);
+  }
+
+  function drawTouchChargeCue(state, impulse) {
+    const anchor = state.anchor;
+    const dirX = impulse.dirX || Math.cos(state.startAngle);
+    const dirY = impulse.dirY || Math.sin(state.startAngle);
+    const power = impulse.power || 0;
+    ctx.save();
+    ctx.translate(anchor.x, anchor.y);
+    const glow = ctx.createRadialGradient(0, 0, 2, 0, 0, 26);
+    glow.addColorStop(0, "rgba(255, 252, 230, 1)");
+    glow.addColorStop(0.28, "rgba(255, 214, 48, 0.95)");
+    glow.addColorStop(1, "rgba(255, 180, 20, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, 26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.fillStyle = "#fffaf0";
+    ctx.fill();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#1a1008";
+    ctx.stroke();
+    ctx.restore();
+
+    const len = 88 + power * 168;
+    const x0 = anchor.x + dirX * 20;
+    const y0 = anchor.y + dirY * 20;
+    const x1 = anchor.x + dirX * len;
+    const y1 = anchor.y + dirY * len;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#1a1008";
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.strokeStyle = "#ffe14a";
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    const ang = Math.atan2(dirY, dirX);
+    ctx.fillStyle = "#ffe14a";
+    ctx.strokeStyle = "#1a1008";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - Math.cos(ang - 0.45) * 22, y1 - Math.sin(ang - 0.45) * 22);
+    ctx.lineTo(x1 - Math.cos(ang + 0.45) * 22, y1 - Math.sin(ang + 0.45) * 22);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+    drawPowerBar(x1 + dirX * 48, y1 + dirY * 28, power);
   }
 
   function onDown(event) {
@@ -812,8 +872,10 @@
       }
     }
     const point = canvasPoint(event);
-    const own = hits(current, point);
-    const other = players.find((player) => player !== current && hits(player, point));
+    const chargingTouch = touchChargeEvent(event);
+    const pad = chargingTouch ? touchHitPad() : null;
+    const own = hits(current, point, pad);
+    const other = players.find((player) => player !== current && hits(player, point, pad));
     if (!own) {
       if (other) setStatus("未輪到" + other.name + "。而家係" + current.name + "射。");
       return;
@@ -826,17 +888,26 @@
     }
     const body = current.body;
     const now = performance.now();
+    let anchor = { x: point.x, y: point.y };
+    if (chargingTouch) {
+      const snapped = nearestSkeletonPoint(current, point);
+      if (snapped) anchor = snapped;
+    }
     drag = {
       player: current,
       pointerId: event.pointerId,
       origin: { x: body.position.x, y: body.position.y },
-      anchor: { x: point.x, y: point.y },
+      anchor,
       pos: controlMode === "charge" ? { x: point.x, y: point.y } : { x: body.position.x, y: body.position.y },
       startAngle: body.angle,
-      grab: { x: point.x - body.position.x, y: point.y - body.position.y },
+      grab: { x: anchor.x - body.position.x, y: anchor.y - body.position.y },
       samples: [{ x: point.x, y: point.y, t: now }],
       power: 0,
+      touchCharge: chargingTouch,
     };
+    if (event.pointerType === "touch") {
+      try { canvas.setPointerCapture(event.pointerId); } catch (error) { /* already captured */ }
+    }
     setSwordMask(current, false);
     Sleeping.set(body, false);
     canvas.classList.add("grabbing");
@@ -2674,22 +2745,22 @@
   function selectWeapon(player, weapon, remote) {
     if (isLostWeapon(player, weaponKey(weapon))) {
       if (!remote) setStatus(shelfLabel(weaponList(player), weapon) + "報廢咗，唔可以再揀。");
-      return;
+      return false;
     }
     if (playPage && player.lockedId) {
       if (!remote) setStatus("呢舖已經出手，唔可以再換劍。");
-      return;
+      return false;
     }
     if (remote) {
-      if (phase !== "aim" || current !== player) return;
+      if (phase !== "aim" || current !== player) return false;
     } else if (matchMode === "online" && player.id !== onlineSeat) {
       setStatus("呢邊係對手嘅劍。");
-      return;
+      return false;
     } else if (!canPickWeapon(player)) {
       setStatus(phase === "fly" ? "劍未停，未可以換。" : "未輪到你換劍。");
-      return;
+      return false;
     }
-    if (player.weapon && weaponKey(weapon) === weaponKey(player.weapon) && player.body) return;
+    if (player.weapon && weaponKey(weapon) === weaponKey(player.weapon) && player.body) return true;
     arm(player, weapon);
     setStatus(player.name + "換上" + shelfLabel(weaponList(player), weapon) + "，劍擺返枱邊。");
     if (onlineGuest() && player.id === onlineSeat) {
@@ -2697,6 +2768,7 @@
     }
     if (onlineHost()) onlinePublish(true);
     if (player === current) syncForge();
+    return true;
   }
 
   function resetSword(player, remote) {
@@ -2981,6 +3053,7 @@
   }
 
   function bindUi() {
+    bindTouchShelf();
     bindDesk();
     bindForge();
     bindTerrain();
@@ -3057,7 +3130,7 @@
           const button = event.target.closest(".weapon");
           if (!button) return;
           const weapon = weaponList(player).find((item) => weaponKey(item) === button.dataset.weapon);
-          if (weapon) selectWeapon(player, weapon);
+          if (weapon && selectWeapon(player, weapon)) collapseTouchShelf();
         });
       }
       if (player.resetBtn) player.resetBtn.addEventListener("click", () => resetSword(player));
@@ -3317,7 +3390,7 @@
     return { minX, minY, maxX, maxY };
   }
 
-  function hits(player, point) {
+  function hits(player, point, touchPad) {
     if (!player.body || !player.weapon) return false;
     const vis = geoPos(player);
     const dx = point.x - vis.x;
@@ -3327,17 +3400,147 @@
     const localY = -dx * Math.sin(angle) + dy * Math.cos(angle);
     const bounds = player.weapon.visualBounds;
     const pad = 16;
+    const extraX = touchPad ? touchPad.x : 0;
+    const extraY = touchPad ? touchPad.y : 0;
     if (
       bounds &&
-      localX >= bounds.minX - pad &&
-      localX <= bounds.maxX + pad &&
-      localY >= bounds.minY - pad &&
-      localY <= bounds.maxY + pad
+      localX >= bounds.minX - pad - extraX &&
+      localX <= bounds.maxX + pad + extraX &&
+      localY >= bounds.minY - pad - extraY &&
+      localY <= bounds.maxY + pad + extraY
     ) {
       return true;
     }
     const half = player.weapon.hitHalf;
-    return !!half && Math.abs(localX) <= half.x && Math.abs(localY) <= half.y;
+    return !!half && Math.abs(localX) <= half.x + extraX && Math.abs(localY) <= half.y + extraY;
+  }
+
+  function touchChargeEvent(event) {
+    if (controlMode !== "charge" || !event) return false;
+    if (event.pointerType === "touch") return true;
+    if (event.pointerType === "mouse" || event.pointerType === "pen") return false;
+    return window.matchMedia("(pointer: coarse)").matches;
+  }
+
+  function touchHitPad() {
+    const rect = canvas.getBoundingClientRect();
+    const reach = 40;
+    return {
+      x: rect.width > 0 ? (reach * VIEW_W) / rect.width : reach,
+      y: rect.height > 0 ? (reach * VIEW_H) / rect.height : reach,
+    };
+  }
+
+  function nearestSkeletonPoint(player, point) {
+    const parts = player.weapon && player.weapon.parts;
+    if (!player.body || !parts || !parts.length) return null;
+    const vis = geoPos(player);
+    const angle = player.body.angle;
+    const dx = point.x - vis.x;
+    const dy = point.y - vis.y;
+    const localX = dx * Math.cos(angle) + dy * Math.sin(angle);
+    const localY = -dx * Math.sin(angle) + dy * Math.cos(angle);
+    let best = null;
+    let bestDist = Infinity;
+    for (const part of parts) {
+      const hit = nearestOnPart(localX, localY, part);
+      if (!hit || hit.dist >= bestDist) continue;
+      bestDist = hit.dist;
+      best = hit;
+    }
+    if (!best) return null;
+    return {
+      x: vis.x + best.x * Math.cos(angle) - best.y * Math.sin(angle),
+      y: vis.y + best.x * Math.sin(angle) + best.y * Math.cos(angle),
+    };
+  }
+
+  function nearestOnPart(localX, localY, part) {
+    if (part.x == null || part.y == null) return null;
+    const angle = part.angle || 0;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const dx = localX - part.x;
+    const dy = localY - part.y;
+    const lx = dx * cos + dy * sin;
+    const ly = -dx * sin + dy * cos;
+    let cx = lx;
+    let cy = ly;
+    if (part.kind === "circle") {
+      const radius = part.r || 0;
+      const dist = Math.hypot(lx, ly);
+      if (dist > radius && dist > 0) {
+        cx = (lx / dist) * radius;
+        cy = (ly / dist) * radius;
+      }
+    } else {
+      const halfW = (part.w || 0) / 2;
+      const halfH = (part.h || 0) / 2;
+      cx = clamp(lx, -halfW, halfW);
+      cy = clamp(ly, -halfH, halfH);
+    }
+    const x = part.x + cx * cos - cy * sin;
+    const y = part.y + cx * sin + cy * cos;
+    return { x, y, dist: Math.hypot(localX - x, localY - y) };
+  }
+
+  function collapseTouchShelf() {
+    if (!document.body.classList.contains("is-touch")) return;
+    document.body.classList.add("is-shelf-collapsed");
+    const tab = document.getElementById("shelf-tab");
+    if (tab) tab.setAttribute("aria-expanded", "false");
+  }
+
+  function bindTouchShelf() {
+    if (!document.body.classList.contains("is-touch")) return;
+    const tab = document.getElementById("shelf-tab");
+    if (tab) {
+      tab.addEventListener("click", () => {
+        const open = document.body.classList.contains("is-shelf-collapsed");
+        document.body.classList.toggle("is-shelf-collapsed", !open);
+        tab.setAttribute("aria-expanded", open ? "true" : "false");
+      });
+    }
+    document.querySelectorAll(".play-body .weapons").forEach(bindShelfScroll);
+    canvas.addEventListener("touchstart", (event) => event.preventDefault(), { passive: false });
+    document.addEventListener("selectstart", (event) => event.preventDefault());
+    document.addEventListener("contextmenu", (event) => {
+      if (event.target.closest && event.target.closest("input, textarea")) return;
+      event.preventDefault();
+    });
+    document.addEventListener("touchmove", (event) => {
+      if (event.target.closest && event.target.closest(".weapons")) return;
+      event.preventDefault();
+    }, { passive: false });
+  }
+
+  function bindShelfScroll(scroller) {
+    let tracking = null;
+    scroller.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse") return;
+      tracking = { id: event.pointerId, y: event.clientY, top: scroller.scrollTop, moved: false };
+    });
+    scroller.addEventListener("pointermove", (event) => {
+      if (!tracking || event.pointerId !== tracking.id) return;
+      const dy = event.clientY - tracking.y;
+      if (Math.abs(dy) > 8) tracking.moved = true;
+      if (!tracking.moved) return;
+      scroller.scrollTop = tracking.top - dy;
+      event.preventDefault();
+    }, { passive: false });
+    const finish = (event) => {
+      if (!tracking || event.pointerId !== tracking.id) return;
+      if (tracking.moved) scroller.dataset.suppressClick = "1";
+      tracking = null;
+    };
+    scroller.addEventListener("pointerup", finish);
+    scroller.addEventListener("pointercancel", finish);
+    scroller.addEventListener("click", (event) => {
+      if (scroller.dataset.suppressClick !== "1") return;
+      scroller.dataset.suppressClick = "";
+      event.preventDefault();
+      event.stopPropagation();
+    }, true);
   }
 
   function swordOwner(body) {

@@ -2,13 +2,13 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#07080c" />
   <title>膠劍仔大戰｜吉利文具士多</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=land13" />
+  <link rel="stylesheet" href="style.css?v=land15" />
 </head>
 <body class="play-body">
   <main class="play-shell">
@@ -56,15 +56,13 @@
       </div>
     </section>
 
-    <section class="play-shelves" aria-label="武器架">
+    <button type="button" class="shelf-tab" id="shelf-tab" aria-expanded="true" aria-controls="play-shelves">武器</button>
+    <section class="play-shelves" id="play-shelves" aria-label="武器架">
       <article class="card p1" id="card-p1">
         <p class="eyebrow">紅隊</p>
         <h2>玩家一</h2>
         <p class="score">局數 <strong id="score-p1">0</strong> · 呢局 <strong id="points-p1">0</strong>/3</p>
         <div class="weapons" id="weapons-p1"></div>
-        <div class="card-actions">
-          <button type="button" class="text-btn" id="reset-p1">擺返原位</button>
-        </div>
         <div class="loot" id="loot-p1">櫃桶仲係空</div>
       </article>
       <article class="card p2" id="card-p2">
@@ -72,9 +70,6 @@
         <h2 id="title-p2">玩家二</h2>
         <p class="score">局數 <strong id="score-p2">0</strong> · 呢局 <strong id="points-p2">0</strong>/3</p>
         <div class="weapons" id="weapons-p2"></div>
-        <div class="card-actions">
-          <button type="button" class="text-btn" id="reset-p2">擺返原位</button>
-        </div>
         <div class="loot" id="loot-p2">櫃桶仲係空</div>
       </article>
     </section>
@@ -95,6 +90,6 @@
 
   <script src="weapon-store.js?v=jiimg"></script>
   <script src="matter.min.js"></script>
-  <script src="main.js?v=land13"></script>
+  <script src="main.js?v=land14"></script>
 </body>
 </html>
