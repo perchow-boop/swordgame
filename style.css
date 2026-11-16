@@ -540,7 +540,7 @@ body.menu-body {
   height: 100%;
   display: grid;
   place-items: center;
-  padding: clamp(12px, 3vh, 36px) clamp(14px, 3vw, 48px) clamp(28px, 5vh, 48px);
+  padding: clamp(12px, 3vh, 36px) clamp(14px, 3vw, 48px) max(30px, env(safe-area-inset-bottom));
 }
 
 .menu-play {
@@ -883,7 +883,7 @@ body.menu-body {
 }
 
 @media (max-height: 430px) {
-  .menu-screen { padding-top: 8px; padding-bottom: 30px; }
+  .menu-screen { padding-top: 8px; padding-bottom: max(30px, env(safe-area-inset-bottom)); }
   .menu-title { font-size: clamp(40px, calc(4.6vh + 16px), 56px); letter-spacing: 0.04em; }
   .menu-btn { min-height: 0; height: auto; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 4px 0 #5c1016; }
   .menu-btn.cpu { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 4px 0 #10284f; }
@@ -1462,7 +1462,9 @@ body.play-body {
   height: 100dvh;
   display: block;
   overflow: hidden;
-  padding: 0;
+  box-sizing: border-box;
+  padding: 0 0 max(30px, env(safe-area-inset-bottom));
+  background: #07080c;
   gap: 0;
 }
 
@@ -1488,8 +1490,9 @@ body.play-body {
 .play-body .play-stage {
   position: absolute;
   inset: 0;
+  bottom: max(30px, env(safe-area-inset-bottom));
   width: 100%;
-  height: 100%;
+  height: auto;
   overflow: hidden;
   container-type: normal;
   border-radius: 0;
