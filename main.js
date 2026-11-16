@@ -3229,6 +3229,54 @@
         window.location.reload();
       });
     }
+    const fullscreenBtn = document.getElementById("fullscreen-btn");
+    const exitFullscreenBtn = document.getElementById("exit-fullscreen");
+    const paintFullscreen = (on) => {
+      if (fullscreenBtn) {
+        fullscreenBtn.textContent = on ? "全螢幕：開" : "全螢幕：關";
+        fullscreenBtn.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+      if (exitFullscreenBtn) exitFullscreenBtn.hidden = !on;
+    };
+    const nativeFullscreenElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+    const enterNativeFullscreen = () => {
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!req) return;
+      try {
+        const pending = req.call(el);
+        if (pending && typeof pending.catch === "function") pending.catch(() => {});
+      } catch (error) {}
+    };
+    const leaveNativeFullscreen = () => {
+      if (!nativeFullscreenElement()) return;
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (!exit) return;
+      try {
+        const pending = exit.call(document);
+        if (pending && typeof pending.catch === "function") pending.catch(() => {});
+      } catch (error) {}
+    };
+    const setPlayFullscreen = (on) => {
+      document.body.classList.toggle("is-fullscreen", !!on);
+      paintFullscreen(!!on);
+      if (on) enterNativeFullscreen();
+      else leaveNativeFullscreen();
+      fitCanvas();
+      window.requestAnimationFrame(fitCanvas);
+    };
+    if (fullscreenBtn) fullscreenBtn.addEventListener("click", () => setPlayFullscreen(!document.body.classList.contains("is-fullscreen")));
+    if (exitFullscreenBtn) exitFullscreenBtn.addEventListener("click", () => setPlayFullscreen(false));
+    const syncNativeFullscreen = () => {
+      if (nativeFullscreenElement()) return;
+      if (!document.body.classList.contains("is-fullscreen")) return;
+      document.body.classList.remove("is-fullscreen");
+      paintFullscreen(false);
+      fitCanvas();
+      window.requestAnimationFrame(fitCanvas);
+    };
+    document.addEventListener("fullscreenchange", syncNativeFullscreen);
+    document.addEventListener("webkitfullscreenchange", syncNativeFullscreen);
     window.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !pauseBox || !intro.hidden || phase === "result") return;
       pauseBox.hidden = !pauseBox.hidden;
@@ -4190,7 +4238,7 @@
     b.font = '20px "Ma Shan Zheng", "KaiTi", serif';
     b.fillStyle = "rgba(62, 28, 16, 0.42)";
     b.textAlign = "left";
-    b.fillText("小明到此一遊", topX + 150, topY + 58);
+    b.fillText("on膠劍仔大作戰", topX + 150, topY + 58);
   }
 
   function drawFloor(b, x, y, w, h) {

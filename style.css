@@ -1098,6 +1098,38 @@ body.play-body {
   border-radius: 8px;
 }
 
+body.play-body.is-fullscreen,
+body.play-body.is-fullscreen .play-shell {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100dvh;
+  z-index: 999999;
+}
+
+body.play-body.is-fullscreen .play-pause {
+  z-index: 1000001;
+}
+
+.exit-fullscreen {
+  position: fixed;
+  z-index: 1000002;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: calc(3em + 4px);
+  padding: 6px 16px;
+  color: #ffe7a8;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  background: rgba(7, 8, 12, 0.88);
+  border: 2px solid rgba(227, 179, 65, 0.85);
+  border-radius: 8px;
+}
+
 .play-stage {
   grid-column: 1;
   grid-row: 2;
@@ -1472,10 +1504,14 @@ body.play-body {
   position: absolute;
   top: 0;
   left: 0;
-  right: 0;
+  right: var(--shelf-w);
   z-index: 4;
   pointer-events: none;
   padding: calc(4px + env(safe-area-inset-top, 0px)) calc(8px + env(safe-area-inset-right, 0px)) 4px calc(8px + env(safe-area-inset-left, 0px));
+}
+
+.play-body.is-shelf-collapsed .play-hud {
+  right: 0;
 }
 
 .play-body .play-hud .play-actions,

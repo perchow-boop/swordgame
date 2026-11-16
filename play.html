@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=land28" />
+  <link rel="stylesheet" href="style.css?v=land31" />
 </head>
 <body class="play-body">
   <main class="play-shell">
@@ -23,7 +23,7 @@
           <button type="button" class="text-btn mode-btn" id="mode-flick" aria-pressed="true">撥</button>
           <button type="button" class="text-btn mode-btn" id="mode-charge" aria-pressed="false">蓄力彈</button>
         </div>
-        <button type="button" class="play-pause-btn" id="pause-btn">暫停</button>
+        <button type="button" class="play-pause-btn" id="pause-btn">設定</button>
       </div>
     </header>
 
@@ -78,19 +78,22 @@
   <div id="pause" class="play-pause" hidden>
     <div class="poster" role="dialog" aria-modal="true" aria-labelledby="pause-title">
       <p class="eyebrow">吉利文具士多</p>
-      <h2 id="pause-title">暫停</h2>
+      <h2 id="pause-title">設定</h2>
       <div class="play-end">
         <button type="button" class="primary" id="resume-btn">繼續</button>
         <button type="button" class="primary" id="help-btn">點樣玩</button>
         <button type="button" class="primary" id="mute-btn">聲效：開</button>
+        <button type="button" class="primary" id="fullscreen-btn" aria-pressed="false">全螢幕：關</button>
         <a class="primary" href="index.html">返回主畫面</a>
       </div>
     </div>
   </div>
 
+  <button type="button" class="exit-fullscreen" id="exit-fullscreen" hidden>退出全螢幕</button>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="weapon-store.js?v=webp1"></script>
   <script src="matter.min.js"></script>
-  <script src="main.js?v=land27"></script>
+  <script src="main.js?v=land29"></script>
 </body>
 </html>
