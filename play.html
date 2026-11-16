@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#07080c" />
+  <title>膠劍仔大戰｜吉利文具士多</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=land24" />
+</head>
+<body class="play-body">
+  <main class="play-shell">
+    <header class="play-hud">
+      <div class="play-copy">
+        <p id="scoreline">第 1 局 · 場 0 ： 0 · 局數 0 ： 0</p>
+        <p id="status" aria-live="polite">撳「開波」，玩家一先射。</p>
+        <p id="play-brief" class="play-brief"></p>
+      </div>
+      <div class="play-actions">
+        <div class="mode-switch" role="group" aria-label="發射方式">
+          <button type="button" class="text-btn mode-btn" id="mode-flick" aria-pressed="true">撥</button>
+          <button type="button" class="text-btn mode-btn" id="mode-charge" aria-pressed="false">蓄力彈</button>
+        </div>
+        <button type="button" class="play-pause-btn" id="pause-btn">暫停</button>
+      </div>
+    </header>
+
+    <section class="stage play-stage" aria-label="對戰枱面">
+      <canvas id="arena" width="1376" height="768">你的瀏覽器不支援 Canvas。</canvas>
+      <div id="intro" class="veil">
+        <div class="poster">
+          <p class="eyebrow">吉利文具士多呈獻</p>
+          <h2>點樣玩膠劍仔</h2>
+          <ol>
+            <li>輪流拖自己把劍。慢推係「撥」，貼住枱面滑。</li>
+            <li>撳住再快手甩開係「彈」，會短暫離地，撞到先翻。</li>
+            <li>兩把劍停低之後，邊把疊喺上面就贏一舖。</li>
+            <li>出手之後呢場唔可以再換劍。輸咗嘅劍呢局會打叉。先疊贏對方三把武器就贏呢一局。先贏兩局就贏晒。</li>
+          </ol>
+          <button type="button" class="primary" id="start-btn">開波</button>
+        </div>
+      </div>
+      <div id="result" class="veil result-veil" hidden>
+        <div class="poster win-poster">
+          <div class="chop" aria-hidden="true">勝</div>
+          <h2 id="result-title">玩家一勝</h2>
+          <p id="result-detail"></p>
+          <div class="play-end">
+            <button type="button" class="primary" id="again-btn">下一舖</button>
+            <button type="button" class="primary" id="replay-btn">重新開始</button>
+            <a class="primary" id="home-btn" href="index.html">返回主畫面</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <button type="button" class="shelf-tab" id="shelf-tab" aria-expanded="true" aria-controls="play-shelves">武器</button>
+    <section class="play-shelves" id="play-shelves" aria-label="武器架">
+      <article class="card p1" id="card-p1">
+        <p class="eyebrow">紅隊</p>
+        <h2>玩家一</h2>
+        <p class="score">局 <strong id="score-p1">0</strong> · 場 <strong id="points-p1">0</strong>/3</p>
+        <div class="weapons" id="weapons-p1"></div>
+        <div class="loot" id="loot-p1">櫃桶仲係空</div>
+      </article>
+      <article class="card p2" id="card-p2">
+        <p class="eyebrow">藍隊</p>
+        <h2 id="title-p2">玩家二</h2>
+        <p class="score">局 <strong id="score-p2">0</strong> · 場 <strong id="points-p2">0</strong>/3</p>
+        <div class="weapons" id="weapons-p2"></div>
+        <div class="loot" id="loot-p2">櫃桶仲係空</div>
+      </article>
+    </section>
+  </main>
+
+  <div id="pause" class="play-pause" hidden>
+    <div class="poster" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+      <p class="eyebrow">吉利文具士多</p>
+      <h2 id="pause-title">暫停</h2>
+      <div class="play-end">
+        <button type="button" class="primary" id="resume-btn">繼續</button>
+        <button type="button" class="primary" id="help-btn">點樣玩</button>
+        <button type="button" class="primary" id="mute-btn">聲效：開</button>
+        <a class="primary" href="index.html">返回主畫面</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="weapon-store.js?v=webp1"></script>
+  <script src="matter.min.js"></script>
+  <script src="main.js?v=land27"></script>
+</body>
+</html>
